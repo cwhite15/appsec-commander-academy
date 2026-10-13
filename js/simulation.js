@@ -1,19 +1,42 @@
-// Mission 02 content. Scenarios, initiatives, and incidents are carried over from
-// the Base44 "Roadmap Simulator" page. Unlike the original, each scenario faces a
-// fixed incident deck drawn from its threat profile, so reading the intel and
-// investing against it is what wins the mission, not a lucky shuffle.
+// Mission 02 content. Scenarios, initiatives, and incidents started from the Base44
+// "Roadmap Simulator" page and were redesigned for SAINTCON 2026 (see docs/design/).
 //
 // Each scenario is a separate company played on its own; nothing carries between them.
-// Within a scenario, an initiative costs a one-time setup plus a monthly run cost over
-// that company's timeline, scaled by its size (headcount / 100), so a longer or larger
-// engagement pays proportionally more. Budgets are program dollars for the whole
-// timeline, excluding salaries; capacity is the engineer-weeks the company's staffing
-// can put toward roadmap work.
+// Every company has a risk register: a likelihood for each of the 14 threats within its
+// timeline. Expected loss (EL) is likelihood × impact, summed over the whole register:
+//   inherent EL: no controls at all
+//   current EL:  the controls the company already has (its starting posture)
+//   target EL:   after the attendee's roadmap
+// Readiness is the share of inherent EL the company's controls remove, so what it already
+// has counts toward the score.
+//
+// Costs: an initiative costs a one-time setup plus a monthly run cost over that company's
+// timeline, scaled by its size (headcount / 100). Budgets are program dollars for the whole
+// timeline, excluding salaries; capacity is the engineer-weeks the company's staffing can put
+// toward roadmap work. Controls already in place cost nothing. Partial controls run for free
+// at half strength, and upgrading one to full costs half of its full cost.
 
-// A roadmap passes when it prevents at least this share of the company's projected loss.
-// No control is perfect, so even the best affordable roadmaps leave roughly 25-35% behind.
-export const passingReadiness = 60;
+// A roadmap passes when the company's controls remove at least this share of inherent expected loss.
+export const passingReadiness = 66;
 export const baselineHeadcount = 100;
+export const runLength = 5;
+
+export const likelihoodDefinition = "Likelihood is the chance this incident happens at full impact within the company's timeline, not the chance that the weakness exists.";
+
+// Foundations make other controls work instead of stopping incidents themselves. Each control
+// is rated assuming its foundations are in place; each missing one takes away this share of
+// what the control delivers. A partial foundation takes away half of its penalty. Detection
+// is a regular control that Incident Response depends on: a plan nobody triggers is a document.
+export const penalties = { vuln_mgmt: 0.5, inventory: 0.35, champions: 0.25, training: 0.15, detection: 0.5 };
+
+// OWASP SAMM v2 business functions, used to group the build screen.
+export const groups = [
+  { id: "governance", name: "Governance", summary: "Foundations: people, skills, and knowing what you have" },
+  { id: "design", name: "Design", summary: "Stop flaws before code is written" },
+  { id: "implementation", name: "Implementation", summary: "Build and ship safely" },
+  { id: "verification", name: "Verification", summary: "Find what got through" },
+  { id: "operations", name: "Operations", summary: "Protect, detect, and respond in production" }
+];
 
 export const scenarios = [
   {
@@ -24,12 +47,21 @@ export const scenarios = [
     headcount: 120,
     months: 6,
     budget: 90,
-    engineerWeeks: 36,
-    staffing: "You, the first AppSec hire, plus borrowed platform engineering time",
+    engineerWeeks: 48,
+    staffing: "You, the first AppSec hire, plus most of a platform engineer on loan",
     impactMultiplier: 1.3,
     impactNote: "Payments and PII raise fraud losses and PCI exposure.",
     threat: "High transaction volume, PII handling, cloud-native architecture.",
-    incidentIds: ["secret_leak", "sqli", "cred_stuffing", "idor", "container_vuln"]
+    postureStory: "120 people, mostly engineers, so free tools are everywhere. But there's no coordination between teams, no tracking, and no definition of what security requires.",
+    posture: {
+      sast: { state: "partial", note: "CodeQL or Semgrep CE on some repos" },
+      sca: { state: "partial", note: "Dependabot alerts, nobody assigned" },
+      secrets: { state: "partial", note: "GitHub secret scanning; some teams use AWS Secrets Manager, others .env files" },
+      mfa: { state: "partial", note: "Staff only; customers have none" },
+      waf: { state: "partial", note: "CDN free tier" },
+      container: { state: "partial", note: "Basic registry image scanning" }
+    },
+    riskRegister: { cred_stuffing: 0.6, secret_leak: 0.55, sqli: 0.35, account_takeover: 0.35, idor: 0.45, misconfiguration: 0.15, container_vuln: 0.4, dep_vuln: 0.06, breach: 0.05, design_flaw: 0.08, privilege_escalation: 0.08, xss: 0.1, ddos: 0.05, malicious_package: 0.08 }
   },
   {
     id: "medisecure",
@@ -39,12 +71,22 @@ export const scenarios = [
     headcount: 80,
     months: 12,
     budget: 80,
-    engineerWeeks: 26,
+    engineerWeeks: 34,
     staffing: "A half-time security engineer shared with compliance, plus two champions",
     impactMultiplier: 1.5,
     impactNote: "PHI raises breach notification costs and HIPAA penalties.",
     threat: "PHI exposure risk, regulated industry, architecture in transition.",
-    incidentIds: ["dep_vuln", "idor", "secret_leak", "container_vuln", "breach"]
+    postureStory: "An annual internal audit against its HIPAA policy proves compliance to leadership, so everything the policy names exists on paper. Pen test findings sit unfixed.",
+    posture: {
+      data_protection: { state: "in", note: "Encryption at rest and in transit" },
+      pentest: { state: "in", note: "Annual, because customers and auditors expect it; findings sit unfixed" },
+      ir: { state: "partial", note: "On paper, never exercised" },
+      inventory: { state: "partial", note: "HIPAA risk analysis of ePHI systems, not a service inventory" },
+      training: { state: "partial", note: "Annual HIPAA awareness, not secure coding" },
+      rbac: { state: "partial", note: "Annual user-access review, not service authorization" },
+      detection: { state: "partial", note: "Audit logs reviewed for the audit, not monitored" }
+    },
+    riskRegister: { dep_vuln: 0.45, breach: 0.2, idor: 0.5, secret_leak: 0.4, privilege_escalation: 0.3, misconfiguration: 0.25, container_vuln: 0.4, design_flaw: 0.12, account_takeover: 0.08, cred_stuffing: 0.08, xss: 0.08, sqli: 0.05, ddos: 0.03, malicious_package: 0.08 }
   },
   {
     id: "retailrush",
@@ -53,32 +95,53 @@ export const scenarios = [
     description: "A 200-person e-commerce platform replacing a legacy codebase over 18 months, with two peak shopping seasons along the way. High traffic, high stakes.",
     headcount: 200,
     months: 18,
-    budget: 350,
-    engineerWeeks: 90,
-    staffing: "A two-person AppSec team, about 60% of it free for roadmap work",
+    budget: 250,
+    engineerWeeks: 105,
+    staffing: "A two-person AppSec team, about 70% of it free for roadmap work",
     impactMultiplier: 1.0,
     impactNote: "Impact is driven by downtime and lost revenue at scale.",
-    threat: "Legacy code, traffic spikes, revenue-critical uptime.",
-    incidentIds: ["ddos", "dep_vuln", "sqli", "cred_stuffing", "breach"]
+    threat: "Legacy code, traffic spikes, revenue-critical uptime, and a re-platform that rebuilds checkout, promotions, and refunds.",
+    postureStory: "Plenty of spend, little effect. Several partial controls are also PCI DSS findings waiting to happen.",
+    posture: {
+      sast: { state: "in", note: "Bought two years ago, now shelfware" },
+      pentest: { state: "in", note: "Annual, for PCI" },
+      waf: { state: "partial", note: "Log-only mode" },
+      detection: { state: "partial", note: "Logs collected, nobody watches" },
+      mfa: { state: "partial", note: "Admins only" },
+      data_protection: { state: "partial", note: "Processor tokenizes cards; customer PII is not" },
+      training: { state: "partial", note: "Annual awareness, not secure coding" }
+    },
+    riskRegister: { dep_vuln: 0.5, cred_stuffing: 0.7, sqli: 0.4, ddos: 0.65, breach: 0.2, xss: 0.3, account_takeover: 0.25, design_flaw: 0.35, secret_leak: 0.15, misconfiguration: 0.12, container_vuln: 0.2, idor: 0.15, privilege_escalation: 0.05, malicious_package: 0.12 }
   }
 ];
 
-// setupK / monthlyK: program dollars ($K) for a 100-person company.
+// setupK / monthlyK: program dollars ($K) for a 100-person company (about 50 engineers).
 // setupWeeks / monthlyWeeks: engineer-weeks for a 100-person company.
-// mitigates: share of an incident's loss the initiative removes, by threat category.
+// mitigates: share of an incident's loss the initiative removes, by threat, with its foundations in place.
+// containsAll: detection and response don't prevent attacks, but they limit the loss from every incident.
+// needs: foundations (or, for IR, detection) the initiative depends on. See penalties.
+// short: the name used in on-screen lists such as "Missing: Vulnerability Management (−50%)".
+// rampMonths and helpsShipped are recorded for the time-to-value model and not used yet.
 // Layered controls combine as 1 - (1 - a)(1 - b): each catches part of what the others miss.
-// containsAll: incident response does not prevent attacks, but it limits the loss from every incident.
 export const initiatives = [
-  { id: "sast", name: "SAST Pipeline Scanning", category: "Code Scanning", setupK: 5, monthlyK: 3, setupWeeks: 4, monthlyWeeks: 0.5, mitigates: { code_injection: 0.7, xss: 0.6 }, description: "Automated static analysis in your CI/CD pipeline to catch vulnerabilities before deploy." },
-  { id: "sca", name: "Dependency Scanning (SCA)", category: "Dependencies", setupK: 2, monthlyK: 2, setupWeeks: 2, monthlyWeeks: 0.3, mitigates: { dependency_vuln: 0.8 }, description: "Scan third-party dependencies for known CVEs and auto-generate fix pull requests." },
-  { id: "secrets", name: "Secrets Management Vault", category: "Secrets", setupK: 10, monthlyK: 1.5, setupWeeks: 6, monthlyWeeks: 0.3, mitigates: { secret_leak: 0.85 }, description: "Centralized secrets vault with rotation. Eliminates hardcoded credentials." },
-  { id: "mfa", name: "MFA & Auth Hardening", category: "Authentication", setupK: 5, monthlyK: 1, setupWeeks: 6, monthlyWeeks: 0.2, mitigates: { credential_stuffing: 0.85, account_takeover: 0.8 }, description: "Multi-factor authentication and session hardening across all user-facing apps." },
-  { id: "threat_modeling", name: "Threat Modeling Program", category: "Design Review", setupK: 5, monthlyK: 0.5, setupWeeks: 3, monthlyWeeks: 1, mitigates: { authz_flaw: 0.4, design_flaw: 0.7 }, description: "Structured threat modeling for high-risk features before code is written." },
-  { id: "rbac", name: "RBAC & Authorization Audit", category: "Authorization", setupK: 5, monthlyK: 0, setupWeeks: 8, monthlyWeeks: 0.3, mitigates: { authz_flaw: 0.8, privilege_escalation: 0.7 }, description: "Audit and enforce role-based access controls across all services." },
-  { id: "waf", name: "WAF & DDoS Protection", category: "Infrastructure", setupK: 5, monthlyK: 4, setupWeeks: 1, monthlyWeeks: 0.2, mitigates: { ddos: 0.85, credential_stuffing: 0.4, code_injection: 0.3, dependency_vuln: 0.2 }, description: "Web Application Firewall and rate limiting at the edge." },
-  { id: "training", name: "Secure Coding Training", category: "Culture", setupK: 3, monthlyK: 1, setupWeeks: 1, monthlyWeeks: 0.3, mitigates: { code_injection: 0.3, xss: 0.3 }, description: "OWASP Top 10 training for all engineers. Builds a security-first culture." },
-  { id: "ir", name: "Incident Response Plan", category: "Operations", setupK: 5, monthlyK: 0.3, setupWeeks: 3, monthlyWeeks: 0.2, mitigates: { breach_response: 0.6 }, containsAll: 0.15, description: "Documented IR runbooks, on-call rotation, and tabletop exercises." },
-  { id: "container", name: "Container Image Scanning", category: "Infrastructure", setupK: 3, monthlyK: 2.5, setupWeeks: 3, monthlyWeeks: 0.3, mitigates: { container_vuln: 0.8, misconfiguration: 0.6, dependency_vuln: 0.3 }, description: "Scan container images for vulnerabilities and misconfigurations before deployment." }
+  { id: "training", name: "Secure Coding Training", short: "Secure Coding Training", group: "governance", foundation: true, setupK: 0, monthlyK: 1, setupWeeks: 1, monthlyWeeks: 0.5, mitigates: {}, needs: [], rampMonths: 3, description: "Secure coding training for every engineer, counting learner time. Developers who understand a finding fix it right and use the paved road." },
+  { id: "champions", name: "Security Champions Program", short: "Security Champions", group: "governance", foundation: true, setupK: 0, monthlyK: 0.8, setupWeeks: 3, monthlyWeeks: 0.6, mitigates: {}, needs: [], rampMonths: 4, description: "An embedded champion in each team with protected time to triage findings, run threat models, and own fixes." },
+  { id: "inventory", name: "Inventory, Risk Classification & Coverage Metrics", short: "Inventory", group: "governance", foundation: true, setupK: 0, monthlyK: 0.5, setupWeeks: 5, monthlyWeeks: 0.3, mitigates: {}, needs: [], rampMonths: 2, description: "Know every app, API, and data store, rank them by risk, and measure which controls actually cover each one." },
+  { id: "threat_modeling", name: "Threat Modeling & Security Requirements", short: "Threat Modeling", group: "design", setupK: 5, monthlyK: 0.5, setupWeeks: 3, monthlyWeeks: 0.5, mitigates: { design_flaw: 0.7, authz_flaw: 0.4, privilege_escalation: 0.3 }, needs: ["champions"], rampMonths: 6, helpsShipped: false, description: "Threat model high-risk features and write their security requirements before code is written." },
+  { id: "secure_defaults", name: "Secure Defaults & Paved Roads", short: "Secure Defaults", group: "design", setupK: 0, monthlyK: 0, setupWeeks: 10, monthlyWeeks: 0.5, mitigates: { code_injection: 0.75, xss: 0.75, authz_flaw: 0.5, misconfiguration: 0.3, secret_leak: 0.3 }, needs: ["champions", "training"], rampMonths: 6, helpsShipped: false, description: "Hardened frameworks and templates that make the secure way the easy way: auto-escaping, parameterized queries, authorization middleware." },
+  { id: "mfa", name: "MFA & Auth Hardening", short: "MFA", group: "design", setupK: 5, monthlyK: 0.6, setupWeeks: 5, monthlyWeeks: 0.2, mitigates: { credential_stuffing: 0.85, account_takeover: 0.8 }, needs: ["inventory"], rampMonths: 3, helpsShipped: true, description: "Enforce MFA, rate-limit login and reset flows, and harden sessions and tokens across every user-facing app." },
+  { id: "sca", name: "SCA & Supply Chain Integrity", short: "SCA", group: "implementation", setupK: 0, monthlyK: 1.25, setupWeeks: 2, monthlyWeeks: 0.3, mitigates: { dependency_vuln: 0.8, supply_chain: 0.6 }, needs: ["vuln_mgmt"], rampMonths: 1, helpsShipped: true, description: "Scan dependencies for known CVEs with auto-fix pull requests, pin versions, keep an SBOM, and block known-malicious packages." },
+  { id: "secrets", name: "Secrets Management & Push Protection", short: "Secrets Management", group: "implementation", setupK: 0, monthlyK: 1.8, setupWeeks: 8, monthlyWeeks: 0.3, mitigates: { secret_leak: 0.85 }, needs: ["inventory"], rampMonths: 4, helpsShipped: "partly", description: "One secrets manager with rotation, plus push protection that blocks credentials before they reach a repository." },
+  { id: "vuln_mgmt", name: "Vulnerability Management & SLAs", short: "Vulnerability Management", group: "implementation", foundation: true, setupK: 0, monthlyK: 1, setupWeeks: 4, monthlyWeeks: 0.5, mitigates: {}, needs: [], rampMonths: 2, description: "Triage, an owner, and a fix SLA for every finding from every source. Without it, findings become backlog, not fixes." },
+  { id: "sast", name: "SAST Pipeline Scanning", short: "SAST", group: "verification", setupK: 0, monthlyK: 1.5, setupWeeks: 3, monthlyWeeks: 0.4, mitigates: { code_injection: 0.7, xss: 0.6 }, needs: ["vuln_mgmt", "champions", "training"], rampMonths: 3, helpsShipped: true, description: "Static analysis on every pull request, tuned to keep false positives low." },
+  { id: "dast", name: "DAST & API Security Testing", short: "DAST", group: "verification", setupK: 0, monthlyK: 2.25, setupWeeks: 3, monthlyWeeks: 0.4, mitigates: { xss: 0.5, code_injection: 0.4, authz_flaw: 0.3, misconfiguration: 0.3 }, needs: ["vuln_mgmt", "training"], rampMonths: 2, helpsShipped: true, description: "Automated dynamic and API testing against running staging environments." },
+  { id: "pentest", name: "Pen Testing, Bug Bounty & VDP", short: "Pen Testing", group: "verification", setupK: 25, monthlyK: 0.8, setupWeeks: 2, monthlyWeeks: 0.3, mitigates: { authz_flaw: 0.5, privilege_escalation: 0.5, design_flaw: 0.4, code_injection: 0.4, account_takeover: 0.3 }, needs: ["vuln_mgmt", "champions"], rampMonths: 2, helpsShipped: true, description: "An expert pen test plus a vulnerability disclosure program or bug bounty, to find the logic and access-control flaws scanners miss." },
+  { id: "rbac", name: "RBAC & Authorization Audit", short: "RBAC Audit", group: "verification", setupK: 2, monthlyK: 0, setupWeeks: 8, monthlyWeeks: 0.3, mitigates: { authz_flaw: 0.8, privilege_escalation: 0.7 }, needs: ["inventory", "champions"], rampMonths: 4, helpsShipped: true, description: "Audit and enforce role-based and object-level authorization in every service." },
+  { id: "waf", name: "WAF, Bot & DDoS Protection", short: "WAF", group: "operations", setupK: 0, monthlyK: 0.75, setupWeeks: 1.5, monthlyWeeks: 0.2, mitigates: { ddos: 0.85, credential_stuffing: 0.4, code_injection: 0.3, dependency_vuln: 0.2 }, needs: ["inventory"], rampMonths: 1, helpsShipped: true, description: "A web application firewall in blocking mode, bot management, rate limiting, and DDoS protection at the edge." },
+  { id: "container", name: "Container & Cloud Posture", short: "Cloud Posture", group: "operations", setupK: 0, monthlyK: 2, setupWeeks: 3, monthlyWeeks: 0.4, mitigates: { container_vuln: 0.8, misconfiguration: 0.75, dependency_vuln: 0.3 }, needs: ["vuln_mgmt", "inventory"], rampMonths: 2, helpsShipped: true, description: "Scan images, IaC, and deployment manifests before deploy, and watch cloud configuration for drift (CSPM)." },
+  { id: "data_protection", name: "Data Protection", short: "Data Protection", group: "operations", setupK: 0, monthlyK: 1, setupWeeks: 8, monthlyWeeks: 0.2, mitigates: { breach_response: 0.25, code_injection: 0.2, authz_flaw: 0.2, privilege_escalation: 0.2, secret_leak: 0.15 }, needs: ["inventory"], rampMonths: 4, helpsShipped: true, description: "Encrypt sensitive data, tokenize what you can, and stop collecting what you don't need, so a breach exposes less." },
+  { id: "detection", name: "Security Logging, Monitoring & Detection", short: "Detection", group: "operations", setupK: 0, monthlyK: 2.5, setupWeeks: 6, monthlyWeeks: 0.5, mitigates: { breach_response: 0.4, credential_stuffing: 0.2, account_takeover: 0.2 }, containsAll: 0.1, needs: ["inventory"], rampMonths: 3, helpsShipped: true, description: "Centralized security logs with alerts that someone actually watches, so attacks are caught early." },
+  { id: "ir", name: "Incident Response Plan", short: "Incident Response", group: "operations", setupK: 5, monthlyK: 0.3, setupWeeks: 3, monthlyWeeks: 0.2, mitigates: { breach_response: 0.6 }, containsAll: 0.15, needs: ["detection"], rampMonths: 2, helpsShipped: true, description: "Documented runbooks, on-call, and tabletop exercises. Limits the loss once something is detected." }
 ];
 
 // baseImpactK: cost of the incident ($K) to a 100-person company if nothing stops it:
@@ -88,25 +151,51 @@ export const incidents = [
   { id: "dep_vuln", title: "Dependency Vulnerability Exploited", description: "A vulnerable Log4j-style dependency was exploited in production. Attackers gained initial access through a known CVE that had a patch available for months.", coverageNeeded: "dependency_vuln", severity: "critical", baseImpactK: 400 },
   { id: "secret_leak", title: "API Key Leaked to Public Repo", description: "An engineer accidentally pushed an AWS access key to a public GitHub repository. It was scraped by bots within minutes.", coverageNeeded: "secret_leak", severity: "high", baseImpactK: 150 },
   { id: "cred_stuffing", title: "Credential Stuffing Attack", description: "Attackers are using leaked passwords from another breach to attempt logins across your user base. Thousands of attempts per minute.", coverageNeeded: "credential_stuffing", severity: "high", baseImpactK: 200 },
-  { id: "idor", title: "Broken Access Control (IDOR)", description: "A bug bounty researcher found that any user could access other users' transaction history by changing a URL parameter.", coverageNeeded: "authz_flaw", severity: "critical", baseImpactK: 100 },
+  { id: "idor", title: "Broken Access Control (IDOR)", description: "A bug bounty researcher found that any user could access other users' records by changing an ID in the request.", coverageNeeded: "authz_flaw", severity: "critical", baseImpactK: 100 },
   { id: "container_vuln", title: "Vulnerable Container Deployed", description: "A container image with an unpatched kernel vulnerability was deployed to production without scanning.", coverageNeeded: "container_vuln", severity: "medium", baseImpactK: 60 },
   { id: "ddos", title: "DDoS Traffic Spike", description: "Your platform is receiving 50x normal traffic. Legitimate users are being locked out during peak hours.", coverageNeeded: "ddos", severity: "medium", baseImpactK: 150 },
   { id: "sqli", title: "SQL Injection in Payment Endpoint", description: "A penetration test discovered a SQL injection vulnerability in a critical payment endpoint. Data exfiltration is possible.", coverageNeeded: "code_injection", severity: "critical", baseImpactK: 250 },
-  { id: "breach", title: "Suspected Data Breach", description: "Anomalous database queries detected at 3 AM. You need to determine scope and respond immediately.", coverageNeeded: "breach_response", severity: "high", baseImpactK: 500 }
+  { id: "breach", title: "Suspected Data Breach", description: "Anomalous database queries detected at 3 AM. You need to determine scope and respond immediately.", coverageNeeded: "breach_response", severity: "high", baseImpactK: 500 },
+  { id: "xss", title: "Stored XSS in Support Console", description: "A customer pasted a script into a support ticket. When an agent opened it, the script ran in the agent's session and quietly exported customer records.", coverageNeeded: "xss", severity: "high", baseImpactK: 120 },
+  { id: "account_takeover", title: "Account Takeover via Password Reset", description: "Attackers abused a password-reset flow with no rate limit and long-lived tokens to take over customer accounts, then changed their email and payout details.", coverageNeeded: "account_takeover", severity: "high", baseImpactK: 180 },
+  { id: "design_flaw", title: "Business Logic Flaw in a New Feature", description: "A feature shipped without anyone asking how it could be abused. Replaying one request let a user apply the same credit, refund, or approval over and over.", coverageNeeded: "design_flaw", severity: "high", baseImpactK: 200 },
+  { id: "privilege_escalation", title: "Privilege Escalation to Admin", description: "A profile-update API accepted a role field it never meant to expose. A regular user set themselves to admin and could see every customer's data.", coverageNeeded: "privilege_escalation", severity: "critical", baseImpactK: 220 },
+  { id: "misconfiguration", title: "Production Debug Endpoint Exposed", description: "A deployment manifest shipped with a debug endpoint and the cluster dashboard open to the internet. Scanners found it within a day.", coverageNeeded: "misconfiguration", severity: "high", baseImpactK: 180 },
+  { id: "malicious_package", title: "Malicious Package in the Build", description: "A typosquatted dependency ran its install script in CI and sent the build's cloud credentials to an attacker.", coverageNeeded: "supply_chain", severity: "critical", baseImpactK: 300 }
+];
+
+// How the five incidents in the run are picked. Neither mode changes the score.
+export const runModes = [
+  { id: "inherent", label: "Biggest threats", summary: "The five largest risks before any controls" },
+  { id: "current", label: "Biggest gaps today", summary: "The five largest risks left by what the company already has" }
 ];
 
 export const tiers = [
-  { min: 60, label: "Mission success", desc: "Your roadmap withstood the storm. The board is impressed." },
-  { min: 45, label: "Partial success", desc: "You survived, but with battle damage. Key gaps remain." },
-  { min: 30, label: "Compromised", desc: "Critical gaps led to significant impact. Time to reassess." },
+  { min: 66, label: "Mission success", desc: "Your roadmap withstood the storm. The board is impressed." },
+  { min: 55, label: "Partial success", desc: "You survived, but with battle damage. Key gaps remain." },
+  { min: 40, label: "Compromised", desc: "Critical gaps led to significant impact. Time to reassess." },
   { min: 0, label: "Mission failure", desc: "The roadmap could not defend against the threats." }
 ];
 
+const threatLabels = {
+  dependency_vuln: "dependency CVEs", secret_leak: "secret leaks", credential_stuffing: "credential stuffing", authz_flaw: "broken access control",
+  container_vuln: "vulnerable containers", ddos: "DDoS", code_injection: "injection", breach_response: "data breach", xss: "XSS",
+  account_takeover: "account takeover", design_flaw: "logic flaws", privilege_escalation: "privilege escalation", misconfiguration: "misconfiguration", supply_chain: "malicious packages"
+};
+
 export const findScenario = (id) => scenarios.find((scenario) => scenario.id === id);
 export const findInitiative = (id) => initiatives.find((initiative) => initiative.id === id);
-export const formatCoverage = (category) => category.replaceAll("_", " ");
+export const findIncident = (id) => incidents.find((incident) => incident.id === id);
+export const formatCoverage = (category) => threatLabels[category] || category.replaceAll("_", " ");
+export const formatPercent = (share) => `${Math.round(share * 100)}%`;
+export const validRunMode = (mode) => (runModes.some((item) => item.id === mode) ? mode : runModes[0].id);
 
 export const companyScale = (scenario) => scenario.headcount / baselineHeadcount;
+
+/* Posture and cost */
+
+// "in", "partial", or null for a control the company does not have.
+export const postureOf = (scenario, id) => scenario?.posture[id]?.state || null;
 
 // One-time setup plus monthly run cost over the scenario's timeline, scaled by company size.
 // Setup dollars are fixed; licenses and effort grow with the size of the company.
@@ -118,39 +207,26 @@ export function costOf(initiative, scenario) {
   };
 }
 
+// What funding this initiative costs this company: nothing if it is in place, half if it is partial.
+export function optionCost(scenario, id) {
+  const initiative = findInitiative(id);
+  const posture = postureOf(scenario, id);
+  if (!initiative || posture === "in") return { budget: 0, weeks: 0 };
+  const full = costOf(initiative, scenario);
+  return posture === "partial" ? { budget: Math.round(full.budget / 2), weeks: Math.round(full.weeks / 2) } : full;
+}
+
 export function totals(scenario, activatedIds) {
   return activatedIds.reduce((sum, id) => {
-    const initiative = findInitiative(id);
-    if (!initiative) return sum;
-    const cost = costOf(initiative, scenario);
+    const cost = optionCost(scenario, id);
     return { budget: sum.budget + cost.budget, weeks: sum.weeks + cost.weeks };
   }, { budget: 0, weeks: 0 });
 }
 
-export function effectivenessOf(initiative, category) {
-  return initiative.mitigates[category] ?? initiative.containsAll ?? 0;
-}
-
-// Share of an incident's loss removed by the whole roadmap, layering every control that applies.
-export function mitigationFor(activatedIds, category) {
-  const remaining = activatedIds.reduce((left, id) => {
-    const initiative = findInitiative(id);
-    return initiative ? left * (1 - effectivenessOf(initiative, category)) : left;
-  }, 1);
-  return 1 - remaining;
-}
-
-// Every category the roadmap touches, with its layered mitigation, strongest first.
-export function coverageFor(activatedIds) {
-  const categories = new Set(activatedIds.flatMap((id) => Object.keys(findInitiative(id)?.mitigates || {})));
-  return [...categories]
-    .map((category) => ({ category, mitigation: mitigationFor(activatedIds, category) }))
-    .sort((a, b) => b.mitigation - a.mitigation);
-}
-
+// Attendees fund new controls and upgrade partial ones. In-place controls are already running.
 export function canActivate(scenario, activatedIds, initiativeId) {
   const initiative = findInitiative(initiativeId);
-  if (!scenario || !initiative || activatedIds.includes(initiativeId)) return false;
+  if (!scenario || !initiative || activatedIds.includes(initiativeId) || postureOf(scenario, initiativeId) === "in") return false;
   const spent = totals(scenario, [...activatedIds, initiativeId]);
   return spent.budget <= scenario.budget && spent.weeks <= scenario.engineerWeeks;
 }
@@ -161,11 +237,67 @@ export function sanitizeSelection(scenario, ids) {
   return ids.reduce((kept, id) => (canActivate(scenario, kept, id) ? [...kept, id] : kept), []);
 }
 
-export function incidentDeck(scenario) {
-  return scenario.incidentIds.map((id) => incidents.find((incident) => incident.id === id));
+/* Effectiveness */
+
+// Strength of each control the company runs: 1 in place or funded, 0.5 partial.
+export function levelsFor(scenario, activatedIds = []) {
+  const levels = {};
+  for (const [id, item] of Object.entries(scenario.posture)) levels[id] = item.state === "in" ? 1 : 0.5;
+  for (const id of activatedIds) if (findInitiative(id)) levels[id] = 1;
+  return levels;
 }
 
-// Initiatives that reduce this threat, most effective first. Response-only help is listed last.
+export function effectivenessOf(initiative, category) {
+  return initiative.mitigates[category] ?? initiative.containsAll ?? 0;
+}
+
+// Foundations this initiative needs that are missing or partial, with the share each one takes away.
+export function missingFoundations(initiative, levels) {
+  return initiative.needs
+    .map((id) => ({ initiative: findInitiative(id), penalty: penalties[id] * (1 - (levels[id] || 0)) }))
+    .filter((item) => item.penalty > 0);
+}
+
+// Share of its rating the initiative keeps, given its foundations.
+export function foundationFactor(initiative, levels) {
+  return initiative.needs.reduce((factor, id) => factor * (1 - penalties[id] * (1 - (levels[id] || 0))), 1);
+}
+
+export function deliveredFor(initiative, category, levels) {
+  return effectivenessOf(initiative, category) * (levels[initiative.id] || 0) * foundationFactor(initiative, levels);
+}
+
+// Share of a threat's loss removed by every control the company runs, layered.
+export function mitigationFor(levels, category) {
+  return 1 - initiatives.reduce((left, initiative) => left * (1 - deliveredFor(initiative, category, levels)), 1);
+}
+
+// What a control card shows: its posture, and how much of its rating it delivers against its main threat.
+export function controlStatus(scenario, activatedIds, id) {
+  const initiative = findInitiative(id);
+  const levels = levelsFor(scenario, activatedIds);
+  const level = levels[id] || 0;
+  const [category, rated] = Object.entries(initiative.mitigates).sort((a, b) => b[1] - a[1])[0] || [null, 0];
+  return {
+    initiative,
+    posture: postureOf(scenario, id),
+    note: scenario.posture[id]?.note || "",
+    funded: activatedIds.includes(id),
+    level,
+    category,
+    rated,
+    factor: foundationFactor(initiative, levels),
+    delivered: category ? deliveredFor(initiative, category, levels) : 0,
+    missing: missingFoundations(initiative, levels)
+  };
+}
+
+// Initiatives that lean on this foundation (or on detection, for IR).
+export function supportedBy(foundationId) {
+  return initiatives.filter((initiative) => initiative.needs.includes(foundationId));
+}
+
+// Initiatives that reduce this threat, most effective first. Containment-only help is listed last.
 export function helpfulInitiatives(category) {
   return initiatives
     .map((initiative) => ({ initiative, effectiveness: effectivenessOf(initiative, category), direct: category in initiative.mitigates }))
@@ -173,7 +305,27 @@ export function helpfulInitiatives(category) {
     .sort((a, b) => (b.direct - a.direct) || (b.effectiveness - a.effectiveness));
 }
 
-export const formatPercent = (share) => `${Math.round(share * 100)}%`;
+// What would cut this threat further: direct controls not yet at full strength, and the missing
+// foundations holding back the controls that already address it.
+export function strengthenOptions(scenario, activatedIds, category) {
+  const levels = levelsFor(scenario, activatedIds);
+  const controls = helpfulInitiatives(category)
+    .filter((item) => item.direct && (levels[item.initiative.id] || 0) < 1)
+    .slice(0, 2)
+    .map((item) => ({ ...item, upgrade: postureOf(scenario, item.initiative.id) === "partial" }));
+  const foundations = new Map();
+  for (const initiative of initiatives) {
+    if (!levels[initiative.id] || effectivenessOf(initiative, category) <= 0) continue;
+    for (const { initiative: foundation, penalty } of missingFoundations(initiative, levels)) {
+      const entry = foundations.get(foundation.id) || { initiative: foundation, penalty, upgrade: postureOf(scenario, foundation.id) === "partial", hampers: [] };
+      entry.hampers.push(initiative);
+      foundations.set(foundation.id, entry);
+    }
+  }
+  return { controls, foundations: [...foundations.values()].sort((a, b) => (b.penalty - a.penalty) || (b.hampers.length - a.hampers.length)) };
+}
+
+/* Risk register and scoring */
 
 // An incident's cost to this company: baseline x company size x sector exposure, rounded to $10K.
 export function impactOf(incident, scenario) {
@@ -181,11 +333,44 @@ export function impactOf(incident, scenario) {
 }
 
 export function formatImpact(amountK) {
-  return amountK >= 1000 ? `$${(amountK / 1000).toFixed(1)}M` : `$${amountK}K`;
+  const rounded = Math.round(amountK);
+  return rounded >= 1000 ? `$${(rounded / 1000).toFixed(1)}M` : `$${rounded}K`;
 }
 
-export function deckExposure(scenario) {
-  return incidentDeck(scenario).reduce((sum, incident) => sum + impactOf(incident, scenario), 0);
+const byLoss = (key) => (a, b) => (b[key] - a[key]) || (b.impact - a.impact) || a.incident.id.localeCompare(b.incident.id);
+
+// Every threat with its likelihood, impact, and expected loss: inherent, current (starting posture), and target (after the roadmap).
+export function registerFor(scenario, activatedIds = []) {
+  const current = levelsFor(scenario);
+  const target = levelsFor(scenario, activatedIds);
+  return incidents.map((incident) => {
+    const likelihood = scenario.riskRegister[incident.id];
+    const impact = impactOf(incident, scenario);
+    const inherent = likelihood * impact;
+    const currentMitigation = mitigationFor(current, incident.coverageNeeded);
+    const targetMitigation = mitigationFor(target, incident.coverageNeeded);
+    return { incident, likelihood, impact, inherent, current: inherent * (1 - currentMitigation), target: inherent * (1 - targetMitigation), currentMitigation, targetMitigation };
+  }).sort(byLoss("inherent"));
+}
+
+export function expectedLoss(register) {
+  return register.reduce((sum, row) => ({ inherent: sum.inherent + row.inherent, current: sum.current + row.current, target: sum.target + row.target }), { inherent: 0, current: 0, target: 0 });
+}
+
+const readinessOf = (loss, key) => Math.max(0, Math.round(100 * (1 - loss[key] / loss.inherent)));
+
+// Readiness is the share of inherent expected loss, across the whole register, that the company's controls remove.
+export function scoreRoadmap(scenario, activatedIds) {
+  const loss = expectedLoss(registerFor(scenario, activatedIds));
+  const readiness = readinessOf(loss, "target");
+  return { readiness, dayOne: readinessOf(loss, "current"), loss, tier: tiers.find((tier) => readiness >= tier.min), passed: readiness >= passingReadiness };
+}
+
+// "One possible year": the five incidents with the largest expected loss, before controls or after the starting posture.
+// The attendee's roadmap never changes which five are picked.
+export function incidentRun(scenario, mode = "inherent") {
+  const key = validRunMode(mode) === "current" ? "current" : "inherent";
+  return registerFor(scenario).sort(byLoss(key)).slice(0, runLength).map((row) => row.incident);
 }
 
 export function outcomeFor(mitigation) {
@@ -194,35 +379,42 @@ export function outcomeFor(mitigation) {
   return "breached";
 }
 
-export function assessIncident(incident, activatedIds, scenario) {
+export function assessIncident(incident, scenario, activatedIds) {
+  const levels = levelsFor(scenario, activatedIds);
+  const category = incident.coverageNeeded;
   const potential = impactOf(incident, scenario);
-  const mitigation = mitigationFor(activatedIds, incident.coverageNeeded);
-  const contributors = activatedIds
-    .map((id) => findInitiative(id))
-    .filter((initiative) => initiative && effectivenessOf(initiative, incident.coverageNeeded) > 0)
-    .map((initiative) => ({ initiative, effectiveness: effectivenessOf(initiative, incident.coverageNeeded) }));
+  const mitigation = mitigationFor(levels, category);
+  const contributors = initiatives
+    .filter((initiative) => levels[initiative.id] && effectivenessOf(initiative, category) > 0)
+    .map((initiative) => ({
+      initiative,
+      rated: effectivenessOf(initiative, category),
+      effectiveness: deliveredFor(initiative, category, levels),
+      level: levels[initiative.id],
+      funded: activatedIds.includes(initiative.id),
+      missing: missingFoundations(initiative, levels)
+    }))
+    .sort((a, b) => b.effectiveness - a.effectiveness);
   const impact = Math.round((potential * (1 - mitigation)) / 10) * 10;
-  return { incident, potential, mitigation, contributors, impact, outcome: outcomeFor(mitigation), defended: outcomeFor(mitigation) === "neutralized" };
+  const outcome = outcomeFor(mitigation);
+  return { incident, potential, mitigation, contributors, impact, outcome, defended: outcome === "neutralized" };
 }
 
-// Readiness is the share of the company's projected loss across the whole deck that the roadmap prevented.
-export function scoreResults(results, exposure) {
+// Totals for the incidents assessed so far in a run.
+export function summarizeRun(results) {
+  const exposure = results.reduce((sum, result) => sum + result.potential, 0);
   const financialImpact = results.reduce((sum, result) => sum + result.impact, 0);
-  const readiness = exposure > 0 ? Math.max(0, Math.round(100 * (1 - financialImpact / exposure))) : 100;
   return {
-    readiness,
     exposure,
     financialImpact,
-    prevented: results.reduce((sum, result) => sum + result.potential - result.impact, 0),
+    prevented: exposure - financialImpact,
     defendedCount: results.filter((result) => result.outcome === "neutralized").length,
     containedCount: results.filter((result) => result.outcome === "contained").length,
-    breachedCount: results.filter((result) => result.outcome === "breached").length,
-    tier: tiers.find((tier) => readiness >= tier.min),
-    passed: readiness >= passingReadiness
+    breachedCount: results.filter((result) => result.outcome === "breached").length
   };
 }
 
-export function runSimulation(scenario, activatedIds) {
-  const results = incidentDeck(scenario).map((incident) => assessIncident(incident, activatedIds, scenario));
-  return { results, ...scoreResults(results, deckExposure(scenario)) };
+export function runSimulation(scenario, activatedIds, mode = "inherent") {
+  const results = incidentRun(scenario, mode).map((incident) => assessIncident(incident, scenario, activatedIds));
+  return { results, ...summarizeRun(results), ...scoreRoadmap(scenario, activatedIds) };
 }

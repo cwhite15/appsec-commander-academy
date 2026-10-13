@@ -1,6 +1,6 @@
 import { academyConfig } from "./config.js";
 import { checkAnswer, descriptionBlocks, findProtocol, protocols, totalCommands } from "./protocols.js";
-import { assessIncident, canActivate, costOf, coverageFor, deckExposure, findScenario, formatCoverage, formatImpact, formatPercent, helpfulInitiatives, impactOf, incidentDeck, initiatives, passingReadiness, sanitizeSelection, scenarios, scoreResults, totals } from "./simulation.js";
+import { assessIncident, canActivate, controlStatus, expectedLoss, findInitiative, findScenario, formatCoverage, formatImpact, formatPercent, groups, impactOf, incidentRun, incidents, initiatives, likelihoodDefinition, optionCost, passingReadiness, penalties, postureOf, registerFor, runModes, sanitizeSelection, scenarios, scoreRoadmap, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode } from "./simulation.js";
 import { buildIntro, checkMapAnswer, checkpoint as mapCheckpoint, fields, isRowComplete, isRowStarted, levels, maxFieldLength, rankRows, rowsFromSimulation, sanitizeRows, timelines } from "./roadmap.js";
 
 const main = document.querySelector("#main");
@@ -9,11 +9,11 @@ const printRoot = document.querySelector("#print-root");
 const missionIds = ["protocols", "simulator", "map"];
 const missionMeta = {
   protocols: { number: "01", glyph: "◈", title: "The Command Protocols", skill: "Program components", summary: "Initiate the four protocols every AppSec program runs on, and prove you know why each one matters.", objective: "Work through Define, Evaluate, Integrate, and Measure. Initiate each command to read it, then pass the checkpoint for every protocol.", takeaway: "An AppSec program is strategy, people, workflow, and measurement, not a tool purchase." },
-  simulator: { number: "02", glyph: "✦", title: "The Resource Gauntlet", skill: "Prioritization under pressure", summary: "Spend a limited budget and engineer-weeks on a roadmap, then find out whether it survives five incidents.", objective: `Choose a company, read its threat intel, fund a roadmap, and prevent at least ${passingReadiness}% of the projected loss from five incidents.`, takeaway: "Invest against the threats you actually face. You cannot afford everything." },
+  simulator: { number: "02", glyph: "✦", title: "The Resource Gauntlet", skill: "Prioritization under pressure", summary: "Spend a limited budget and engineer-weeks against a company's risk register, then live through one possible year.", objective: `Choose a company, assess what it already runs, and fund a roadmap that cuts expected loss across its risk register by at least ${passingReadiness}%.`, takeaway: "Invest against the risks you actually face, and fund the foundations that make your tools work. You cannot afford everything." },
   map: { number: "03", glyph: "⬡", title: "The Commander's Map", skill: "Roadmap planning", summary: "Turn what you learned into a stack-ranked plan you can take back to work.", objective: "Plan at least one complete initiative, let the map rank itself by impact and effort, and pass the final checkpoint to lock it in.", takeaway: "Stack-rank by impact vs. effort, and finish what you start." }
 };
 
-const emptyState = () => ({ complete: [], protocols: [], sim: { scenarioId: null, activated: [] }, map: { rows: sanitizeRows([]), checkpointPassed: false } });
+const emptyState = () => ({ complete: [], protocols: [], sim: { scenarioId: null, activated: [], runMode: runModes[0].id }, map: { rows: sanitizeRows([]), checkpointPassed: false } });
 let state = loadState();
 let lab = {};
 
@@ -25,7 +25,7 @@ function loadState() {
     return {
       complete: Array.isArray(saved.complete) ? missionIds.filter((id) => saved.complete.includes(id)) : [],
       protocols: Array.isArray(saved.protocols) ? protocols.map((protocol) => protocol.id).filter((id) => saved.protocols.includes(id)) : [],
-      sim: { scenarioId: scenario ? scenario.id : null, activated: sanitizeSelection(scenario, saved.sim?.activated) },
+      sim: { scenarioId: scenario ? scenario.id : null, activated: sanitizeSelection(scenario, saved.sim?.activated), runMode: validRunMode(saved.sim?.runMode) },
       map: { rows: sanitizeRows(saved.map?.rows), checkpointPassed: saved.map?.checkpointPassed === true }
     };
   } catch { return emptyState(); }
@@ -255,45 +255,101 @@ function bindProtocols() {
 /* Mission 02: The Resource Gauntlet */
 
 function activeScenario() { return findScenario(state.sim.scenarioId); }
+const percentOf = (part, whole) => (whole > 0 ? (part / whole) * 100 : 0);
+// Register totals move in small steps, so show them with one more digit than formatImpact.
+const formatLoss = (amountK) => (amountK >= 1000 ? `$${(amountK / 1000).toFixed(2)}M` : formatImpact(amountK));
+const optionName = (scenario, id) => `${postureOf(scenario, id) === "partial" ? "Upgrade " : ""}${findInitiative(id).short}`;
 
 function simulatorMission() {
-  return shell("simulator", `<div class="workspace" id="sim-workspace">${consoleBox("Roadmap simulator // build · defend · survive", "sim-console")}<aside class="repair-panel" id="sim-panel"></aside></div>`);
+  return shell("simulator", `<div class="workspace" id="sim-workspace">${consoleBox("Roadmap simulator // assess · fund · survive", "sim-console")}<aside class="repair-panel" id="sim-panel"></aside></div>`);
 }
 
 function briefingTemplate() {
-  const cards = scenarios.map((scenario) => `<button type="button" class="scenario-card" data-scenario="${scenario.id}"><span class="skill-tag">${escapeHtml(scenario.tagline)}</span><h3>${escapeHtml(scenario.name)}</h3><p>${escapeHtml(scenario.description)}</p><span class="stat-row"><span>Timeline <b>${scenario.months} months</b></span><span>Budget <b>$${scenario.budget}K</b></span><span>Capacity <b>${scenario.engineerWeeks} eng-weeks</b></span></span><span class="staffing">${escapeHtml(scenario.staffing)}</span></button>`).join("");
+  const cards = scenarios.map((scenario) => `<button type="button" class="scenario-card" data-scenario="${scenario.id}"><span class="skill-tag">${escapeHtml(scenario.tagline)}</span><h3>${escapeHtml(scenario.name)}</h3><p>${escapeHtml(scenario.description)}</p><span class="posture-story"><b>Today:</b> ${escapeHtml(scenario.postureStory)}</span><span class="stat-row"><span>Timeline <b>${scenario.months} months</b></span><span>Budget <b>$${scenario.budget}K</b></span><span>Capacity <b>${scenario.engineerWeeks} eng-weeks</b></span></span><span class="staffing">${escapeHtml(scenario.staffing)}</span></button>`).join("");
   return {
-    console: `<div class="briefing"><strong>Assignment:</strong> You are the new AppSec lead. Choose a company, read its threat intel, and fund a roadmap. Incidents will test whether it holds.</div><div class="scenario-grid">${cards}</div>`,
-    panel: `<span class="step-label">Commander's brief</span><h2>You cannot fund everything.</h2><p>Each company is its own scenario. Every one has more threats than budget, and the roadmap that survives is the one built against the threats that company actually faces.</p><p>Costs cover one-time setup plus running each initiative for the whole timeline, sized to the company. No control is perfect: each one removes part of a threat's loss, and layered controls cover more.</p><div class="protocol-list"><span>Read the threat intel</span><span>Fund initiatives within budget and engineer-weeks</span><span>Prevent at least ${passingReadiness}% of the projected loss from five incidents</span></div><div class="feedback" id="feedback">Choose a company to begin.</div><div class="actions"></div>`
+    console: `<div class="briefing"><strong>Assignment:</strong> You are the new AppSec lead. Choose a company, assess what it already runs, and fund a roadmap against its risk register. Then live through one possible year.</div><div class="scenario-grid">${cards}</div>`,
+    panel: `<span class="step-label">Commander's brief</span><h2>You cannot fund everything.</h2><p>Each company is its own scenario, with a risk register of ${incidents.length} threats. A threat's likelihood times its impact is its expected loss.</p><p class="definition">${escapeHtml(likelihoodDefinition)}</p><p>Every company already runs some controls, some of them only partly. Fund new controls, upgrade partial ones, and mind the foundations: a scanner with nobody to fix its findings delivers a fraction of what it promises.</p><div class="protocol-list"><span>Read the threat intel and the starting posture</span><span>Fund or upgrade controls within budget and engineer-weeks</span><span>Cut expected loss across the register by at least ${passingReadiness}%</span></div><div class="feedback" id="feedback">Choose a company to begin.</div><div class="actions"></div>`
   };
 }
 
 function mitigationSummary(initiative) {
   const parts = Object.entries(initiative.mitigates).map(([category, share]) => `${formatCoverage(category)} ${formatPercent(share)}`);
-  if (initiative.containsAll) parts.push(`every incident ${formatPercent(initiative.containsAll)} (containment)`);
+  if (initiative.containsAll) parts.push(`every other incident ${formatPercent(initiative.containsAll)} (containment)`);
   return parts.join(" · ");
 }
 
-function buildTemplate(scenario) {
+const missingText = (missing) => missing.map((item) => `${item.initiative.short} (−${formatPercent(item.penalty)})`).join(", ");
+
+// "Delivering 35% of 70%. Missing: Vulnerability Management (−50%)." is the lesson on every card.
+function deliveryLine(status) {
+  const { initiative, level } = status;
+  if (initiative.foundation) {
+    const penalty = penalties[initiative.id];
+    const supported = supportedBy(initiative.id).map((item) => item.short).join(", ");
+    return `<span class="delivery">Strengthens ${escapeHtml(supported)}. Without it, each loses ${formatPercent(penalty)} of its effect${level === 0.5 ? `; while it's partial, ${formatPercent(penalty / 2)}` : ""}.</span>`;
+  }
+  const against = `against ${escapeHtml(formatCoverage(status.category))}`;
+  const missing = status.missing.length ? ` Missing: ${escapeHtml(missingText(status.missing))}.` : "";
+  const lead = level === 0
+    ? `If funded now: would deliver ${formatPercent(status.rated * status.factor)} of ${formatPercent(status.rated)} ${against}.`
+    : `${level < 1 ? "Partial: delivering" : "Delivering"} ${formatPercent(status.delivered)} of ${formatPercent(status.rated)} ${against}.`;
+  return `<span class="delivery${status.missing.length ? " short" : ""}">${lead}${missing}</span>`;
+}
+
+function controlCard(scenario, initiative) {
   const { activated } = state.sim;
+  const status = controlStatus(scenario, activated, initiative.id);
+  const badges = [
+    initiative.foundation ? '<span class="badge foundation">Foundation</span>' : "",
+    status.posture === "in" ? '<span class="badge in-place">In place</span>' : "",
+    status.posture === "partial" ? `<span class="badge partial">${status.funded ? "Partial → upgraded" : "Partial"}</span>` : ""
+  ].filter(Boolean).join("");
+  const body = `${badges ? `<span class="card-badges">${badges}</span>` : ""}<span class="patch-title">${escapeHtml(initiative.name)}</span>${status.note ? `<span class="posture-note">Today: ${escapeHtml(status.note)}</span>` : ""}<span class="initiative-desc">${escapeHtml(initiative.description)}</span>${initiative.foundation ? "" : `<span class="mitigates">Rated ${escapeHtml(mitigationSummary(initiative))}</span>`}${deliveryLine(status)}`;
+  if (status.posture === "in") return `<div class="patch initiative in-place"><span class="patch-content running">${body}<span class="cost">Running · no cost to your budget</span></span></div>`;
+  const available = status.funded || canActivate(scenario, activated, initiative.id);
+  const cost = optionCost(scenario, initiative.id);
+  return `<label class="patch initiative${status.posture === "partial" ? " partial" : ""}"><input type="checkbox" name="initiative" value="${initiative.id}"${status.funded ? " checked" : ""}${available ? "" : " disabled"}><span class="patch-content">${body}<span class="cost">${status.posture === "partial" ? "Upgrade to full · " : ""}$${cost.budget}K · ${cost.weeks} eng-wks${available ? "" : " · Locked"}</span></span></label>`;
+}
+
+function groupTemplate(scenario, group) {
+  const members = initiatives.filter((initiative) => initiative.group === group.id);
+  const running = members.filter((initiative) => postureOf(scenario, initiative.id)).length;
+  const selected = members.filter((initiative) => state.sim.activated.includes(initiative.id)).length;
+  return `<details class="control-group" data-group="${group.id}"${lab.closedGroups.has(group.id) ? "" : " open"}><summary><span class="group-name">${escapeHtml(group.name)}</span><span class="group-meta">${escapeHtml(group.summary)} · ${members.length} controls · ${running} running today · ${selected} in your roadmap</span></summary><div class="initiative-grid">${members.map((initiative) => controlCard(scenario, initiative)).join("")}</div></details>`;
+}
+
+function lossTiles(loss) {
+  return `<div class="loss-tiles"><span><small>Inherent</small><strong>${formatLoss(loss.inherent)}</strong></span><span><small>Today</small><strong>${formatLoss(loss.current)}</strong></span><span><small>Your roadmap</small><strong>${formatLoss(loss.target)}</strong></span></div>`;
+}
+
+// Inherent → current → target expected loss for every threat, scaled to the company's largest risk.
+function registerTemplate(scenario, activatedIds) {
+  const register = registerFor(scenario, activatedIds);
+  const largest = Math.max(...register.map((row) => row.inherent));
+  const rows = register.map((row) => `<li class="register-row"><span class="register-head"><span>${escapeHtml(row.incident.title)}</span><b>${formatImpact(row.target)}</b></span><small>${formatPercent(row.likelihood)} × ${formatImpact(row.impact)} = ${formatImpact(row.inherent)} · today ${formatImpact(row.current)}</small><span class="register-bar" aria-hidden="true"><i class="inherent" data-meter="${percentOf(row.inherent, largest)}"></i><i class="current" data-meter="${percentOf(row.current, largest)}"></i><i class="target" data-meter="${percentOf(row.target, largest)}"></i></span></li>`).join("");
+  return `<span class="step-label">Risk register // expected loss</span>${lossTiles(expectedLoss(register))}<p class="definition">${escapeHtml(likelihoodDefinition)}</p><p class="register-legend"><span><i class="key target"></i>Left after your roadmap</span><span><i class="key current"></i>Your roadmap removes</span><span><i class="key inherent"></i>Already removed today</span></p><ol class="register">${rows}</ol>`;
+}
+
+function runModeTemplate(mode) {
+  const current = runModes.find((item) => item.id === mode);
+  return `<fieldset class="run-mode"><legend>Incident run</legend><div class="segmented">${runModes.map((item) => `<label><input type="radio" name="run-mode" value="${item.id}"${item.id === mode ? " checked" : ""}><span>${escapeHtml(item.label)}</span></label>`).join("")}</div><small>${escapeHtml(current.summary)}. Changes which incidents you watch, not your score.</small></fieldset>`;
+}
+
+function buildTemplate(scenario) {
+  const { activated, runMode } = state.sim;
   const spent = totals(scenario, activated);
   const budgetLeft = scenario.budget - spent.budget;
   const weeksLeft = scenario.engineerWeeks - spent.weeks;
-  const coverage = coverageFor(activated);
-  const cards = initiatives.map((initiative) => {
-    const active = activated.includes(initiative.id);
-    const available = active || canActivate(scenario, activated, initiative.id);
-    const cost = costOf(initiative, scenario);
-    return `<label class="patch initiative"><input type="checkbox" name="initiative" value="${initiative.id}"${active ? " checked" : ""}${available ? "" : " disabled"}><span class="patch-content"><span class="patch-title">${escapeHtml(initiative.name)}</span><span class="initiative-desc">${escapeHtml(initiative.description)}</span><span class="mitigates">Reduces ${escapeHtml(mitigationSummary(initiative))}</span><span class="cost">$${cost.budget}K · ${cost.weeks} eng-wks · ${escapeHtml(initiative.category)}${available ? "" : " · Locked"}</span></span></label>`;
-  }).join("");
-  const containment = activated.some((id) => initiatives.find((initiative) => initiative.id === id)?.containsAll);
+  const loss = scoreRoadmap(scenario, activated).loss;
+  const summary = `<div class="live-summary"><span>$${budgetLeft}K left</span><span>${weeksLeft} eng-wks left</span><span>Expected loss ${formatLoss(loss.current)} → <b>${formatLoss(loss.target)}</b></span></div>`;
   return {
-    console: `<div class="briefing"><strong>${escapeHtml(scenario.name)} // ${escapeHtml(scenario.tagline)}</strong><br>${escapeHtml(scenario.description)}</div><p class="answer-instruction">Costs include setup plus ${scenario.months} months of running each initiative at ${escapeHtml(scenario.name)}'s size.</p><div class="evidence intel"><strong>Threat intel:</strong> ${escapeHtml(scenario.threat)} ${escapeHtml(scenario.impactNote)}</div><p class="answer-instruction">Select initiatives to fund. Percentages are the share of a threat's loss each control removes. Locked items exceed your remaining resources.</p><div class="initiative-grid">${cards}</div>`,
+    console: `<div class="briefing"><strong>${escapeHtml(scenario.name)} // ${escapeHtml(scenario.tagline)}</strong><br>${escapeHtml(scenario.description)}</div><div class="evidence intel"><strong>Threat intel:</strong> ${escapeHtml(scenario.threat)} ${escapeHtml(scenario.impactNote)}</div><div class="briefing posture"><strong>Starting posture:</strong> ${escapeHtml(scenario.postureStory)}</div><p class="answer-instruction">Fund new controls or upgrade partial ones. Ratings assume each control's foundations are in place. Costs cover setup plus ${scenario.months} months at ${escapeHtml(scenario.name)}'s size. Locked items exceed your remaining resources.</p>${summary}${groups.map((group) => groupTemplate(scenario, group)).join("")}`,
     panel: `<span class="step-label">Resource bay</span><h2>${escapeHtml(scenario.name)}</h2>
-      <div class="resource"><div class="resource-head"><span>Budget remaining</span><strong>$${budgetLeft}K / $${scenario.budget}K</strong></div><div class="meter"><i data-meter="${(budgetLeft / scenario.budget) * 100}"></i></div></div>
-      <div class="resource"><div class="resource-head"><span>Engineer-weeks remaining</span><strong>${weeksLeft} / ${scenario.engineerWeeks}</strong></div><div class="meter"><i data-meter="${(weeksLeft / scenario.engineerWeeks) * 100}"></i></div></div><p class="resource-note">${scenario.months}-month timeline · ${escapeHtml(scenario.staffing)}</p>
-      <span class="step-label">Protection by threat // layered</span><div class="coverage-tags">${coverage.length ? coverage.map((item) => `<span>${escapeHtml(formatCoverage(item.category))} ${formatPercent(item.mitigation)}</span>`).join("") : '<span class="empty">No coverage yet</span>'}${containment ? `<span>all other incidents ${formatPercent(initiatives.find((initiative) => initiative.containsAll).containsAll)}</span>` : ""}</div>
-      <div class="feedback" id="feedback">${activated.length ? `${activated.length} ${activated.length === 1 ? "initiative" : "initiatives"} funded. Launch when your roadmap matches the threat intel.` : "Fund at least one initiative to launch."}</div>
+      <div class="resource"><div class="resource-head"><span>Budget remaining</span><strong>$${budgetLeft}K / $${scenario.budget}K</strong></div><div class="meter"><i data-meter="${percentOf(budgetLeft, scenario.budget)}"></i></div></div>
+      <div class="resource"><div class="resource-head"><span>Engineer-weeks remaining</span><strong>${weeksLeft} / ${scenario.engineerWeeks}</strong></div><div class="meter"><i data-meter="${percentOf(weeksLeft, scenario.engineerWeeks)}"></i></div></div><p class="resource-note">${scenario.months}-month timeline · ${escapeHtml(scenario.staffing)}. Controls already running are business as usual and aren't charged here.</p>
+      ${registerTemplate(scenario, activated)}
+      <div class="feedback" id="feedback">${activated.length ? `${activated.length} ${activated.length === 1 ? "control" : "controls"} in your roadmap. Launch to live through one possible year.` : "Fund or upgrade at least one control to launch."}</div>
+      ${runModeTemplate(runMode)}
       <div class="actions"><button class="button" id="launch" type="button"${activated.length ? "" : " disabled"}>Launch simulation</button><button class="button secondary" id="change-scenario" type="button">Change company</button></div>`
   };
 }
@@ -304,18 +360,21 @@ function incidentLogTemplate(results) {
   return `<div class="incident-log">${results.map((result) => `<div class="${result.outcome}"><span>${escapeHtml(result.incident.title)}</span><em>${formatPercent(result.mitigation)} mitigated · −${formatImpact(result.impact)}</em></div>`).join("")}</div>`;
 }
 
-function strengthenTemplate(result) {
-  const funded = new Set(result.contributors.map((item) => item.initiative.id));
-  const options = helpfulInitiatives(result.incident.coverageNeeded).filter((item) => !funded.has(item.initiative.id) && item.direct).slice(0, 2);
-  if (!options.length) return "";
-  return options.map((item) => `${escapeHtml(item.initiative.name)} (${formatPercent(item.effectiveness)})`).join(" or ");
+const contributorText = (item) => `${escapeHtml(item.initiative.short)}${item.level < 1 ? " (partial)" : ""} ${formatPercent(item.effectiveness)}${Math.round(item.effectiveness * 100) < Math.round(item.rated * 100) ? ` of ${formatPercent(item.rated)}` : ""}`;
+
+// Two coaching lines: controls that would cut this threat, and missing foundations holding back the ones already in play.
+function strengthenLines(scenario, roadmap, category) {
+  const { controls, foundations } = strengthenOptions(scenario, roadmap, category);
+  const lines = [];
+  if (foundations.length) lines.push(`<b>Holding it back:</b> ${foundations.slice(0, 2).map((item) => `${item.upgrade ? "partial" : "no"} ${escapeHtml(item.initiative.short)} (weakens ${escapeHtml(item.hampers.map((hampered) => hampered.short).join(", "))})`).join("; ")}`);
+  if (controls.length) lines.push(`<b>Would strengthen it:</b> ${controls.map((item) => `${item.upgrade ? "upgrading " : ""}${escapeHtml(item.initiative.short)} (${formatPercent(item.effectiveness)})`).join(" or ")}`);
+  return lines;
 }
 
 function incidentTemplate(scenario) {
-  const deck = incidentDeck(scenario);
-  const incident = deck[lab.index];
+  const incident = lab.run[lab.index];
   const result = lab.revealed ? lab.results[lab.index] : null;
-  const last = lab.index === deck.length - 1;
+  const last = lab.index === lab.run.length - 1;
   let outcome;
   if (!result) {
     outcome = `<button class="button" id="assess" type="button"${lab.assessing ? " disabled" : ""}>${lab.assessing ? '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>&nbsp;Assessing…' : "Assess impact"}</button>`;
@@ -324,44 +383,54 @@ function incidentTemplate(scenario) {
     const explanation = {
       neutralized: `Your controls removed ${formatPercent(result.mitigation)} of the loss from this ${threat} incident.`,
       contained: `Your controls removed ${formatPercent(result.mitigation)} of the loss, but part of this ${threat} incident got through.`,
-      breached: result.mitigation > 0 ? `Only ${formatPercent(result.mitigation)} of the loss was contained. Nothing in your roadmap directly addressed ${threat}.` : `Nothing in your roadmap addressed ${threat}. The threat slipped through.`
+      breached: result.mitigation > 0 ? `Only ${formatPercent(result.mitigation)} of the loss was stopped. Nothing ${escapeHtml(scenario.name)} runs was built for ${threat}, or it was too weak to hold.` : `Nothing ${escapeHtml(scenario.name)} runs addressed ${threat}. The threat slipped through.`
     }[result.outcome];
     const layers = result.contributors.length
-      ? `<p class="lesson"><b>Controls in play:</b> ${result.contributors.map((item) => `${escapeHtml(item.initiative.name)} ${formatPercent(item.effectiveness)}`).join(" + ")}${result.contributors.length > 1 ? ` = ${formatPercent(result.mitigation)} layered` : ""}</p>`
+      ? `<p class="lesson"><b>Controls in play:</b> ${result.contributors.map(contributorText).join(" + ")}${result.contributors.length > 1 ? ` = ${formatPercent(result.mitigation)} layered` : ""}</p>`
       : "";
-    const strengthen = result.outcome === "neutralized" ? "" : strengthenTemplate(result);
-    outcome = `<div class="verdict"><strong>${outcomeLabels[result.outcome]}</strong><p>${explanation}</p></div><div class="impact-grid"><span><small>Loss avoided</small><strong>${formatImpact(result.potential - result.impact)}</strong></span><span><small>Loss taken</small><strong>−${formatImpact(result.impact)}</strong></span></div>${layers}${strengthen ? `<p class="lesson"><b>Would strengthen it:</b> ${strengthen}</p>` : ""}`;
+    const coaching = result.outcome === "neutralized" ? [] : strengthenLines(scenario, lab.roadmap, incident.coverageNeeded);
+    outcome = `<div class="verdict"><strong>${outcomeLabels[result.outcome]}</strong><p>${explanation}</p></div><div class="impact-grid"><span><small>Loss avoided</small><strong>${formatImpact(result.potential - result.impact)}</strong></span><span><small>Loss taken</small><strong>−${formatImpact(result.impact)}</strong></span></div>${layers}${coaching.map((line) => `<p class="lesson">${line}</p>`).join("")}`;
   }
   const nextButton = result ? `<button class="button" id="next-incident" type="button">${last ? "View results" : "Next incident"} →</button>` : "";
-  const readiness = scoreResults(lab.results, deckExposure(scenario)).readiness;
+  const sofar = summarizeRun(lab.results);
+  const mode = runModes.find((item) => item.id === lab.mode);
   return {
-    console: `<div class="incident-progress"><span class="answer-instruction">Incident response // ${lab.index + 1} of ${deck.length}</span><div class="progress-dots">${deck.map((_, index) => `<i class="progress-dot ${index === lab.index ? "active" : ""} ${index < lab.results.length ? "complete" : ""}"></i>`).join("")}</div></div>
-      <article class="incident-card ${result ? result.outcome : ""}"><span class="severity ${incident.severity}">${incident.severity} // incoming threat</span><h3>${escapeHtml(incident.title)}</h3><p>${escapeHtml(incident.description)}</p>${result ? "" : `<p class="stakes">Potential impact at ${escapeHtml(scenario.name)}: <b>${formatImpact(impactOf(incident, scenario))}</b></p>`}${outcome}</article><div class="actions incident-actions">${nextButton}</div>`,
-    panel: `<span class="step-label">Incident log // ${escapeHtml(scenario.name)}</span><h2>Readiness ${readiness}%</h2><p class="resource-note">Share of the projected ${formatImpact(deckExposure(scenario))} loss your roadmap has prevented so far.</p><div class="meter${readiness >= passingReadiness ? "" : " warn"}"><i data-meter="${readiness}"></i></div>${lab.results.length ? incidentLogTemplate(lab.results) : '<p>No incidents assessed yet.</p>'}<div class="feedback" id="feedback">Funded: ${state.sim.activated.map((id) => escapeHtml(initiatives.find((initiative) => initiative.id === id).name)).join(", ")}</div><div class="actions"></div>`
+    console: `<div class="incident-progress"><span class="answer-instruction">One possible year // incident ${lab.index + 1} of ${lab.run.length}</span><div class="progress-dots">${lab.run.map((_, index) => `<i class="progress-dot ${index === lab.index ? "active" : ""} ${index < lab.results.length ? "complete" : ""}"></i>`).join("")}</div></div>
+      <article class="incident-card ${result ? result.outcome : ""}"><span class="severity ${incident.severity}">${incident.severity} // incoming threat</span><h3>${escapeHtml(incident.title)}</h3><p>${escapeHtml(incident.description)}</p>${result ? "" : `<p class="stakes">Potential impact at ${escapeHtml(scenario.name)}: <b>${formatImpact(impactOf(incident, scenario))}</b> · likelihood <b>${formatPercent(scenario.riskRegister[incident.id])}</b> in ${scenario.months} months</p>`}${outcome}</article><div class="actions incident-actions">${nextButton}</div>`,
+    panel: `<span class="step-label">Incident log // ${escapeHtml(scenario.name)}</span><h2>${escapeHtml(mode.label)}</h2><p class="resource-note">${escapeHtml(mode.summary)} at ${escapeHtml(scenario.name)}. Your score comes from the whole register, not just these five.</p><div class="resource-head"><span>Loss taken so far</span><strong>${formatImpact(sofar.financialImpact)} of ${formatImpact(sofar.exposure)}</strong></div>${lab.results.length ? incidentLogTemplate(lab.results) : "<p>No incidents assessed yet.</p>"}<div class="feedback" id="feedback">Your roadmap: ${lab.roadmap.map((id) => escapeHtml(optionName(scenario, id))).join(", ")}</div><div class="actions"></div>`
   };
 }
 
-function budgetComparison(score, scenario) {
-  if (!score.financialImpact) return `<p class="stakes">No losses. The ${formatImpact(scenario.budget)} program paid for itself.</p>`;
-  const ratio = score.financialImpact / scenario.budget;
-  return `<p class="stakes">Your roadmap prevented <b>${formatImpact(score.prevented)}</b> of the projected <b>${formatImpact(score.exposure)}</b>. The loss that got through, <b>${formatImpact(score.financialImpact)}</b>, is ${ratio >= 1 ? `${ratio.toFixed(1)}× the entire ${formatImpact(scenario.budget)} program budget` : `${Math.round(ratio * 100)}% of the ${formatImpact(scenario.budget)} program budget`}.</p>`;
+function budgetComparison(run, scenario) {
+  if (!run.financialImpact) return `<p class="stakes">No losses this year. The ${formatImpact(scenario.budget)} program paid for itself.</p>`;
+  const ratio = run.financialImpact / scenario.budget;
+  return `<p class="stakes">This year's loss, <b>${formatImpact(run.financialImpact)}</b>, is ${ratio >= 1 ? `${ratio.toFixed(1)}× the entire ${formatImpact(scenario.budget)} program budget` : `${Math.round(ratio * 100)}% of the ${formatImpact(scenario.budget)} program budget`}.</p>`;
+}
+
+// The register rows with the most expected loss left, each with what would cut it further.
+function gapsTemplate(scenario, register) {
+  return [...register].sort((a, b) => b.target - a.target).slice(0, 3).map((row) => {
+    const lines = strengthenLines(scenario, lab.roadmap, row.incident.coverageNeeded);
+    return `<li><strong>${escapeHtml(row.incident.title)}</strong>: ${formatImpact(row.target)} expected loss left (${formatPercent(row.targetMitigation)} mitigated)${lines.map((line) => `<br><small>${line}</small>`).join("")}</li>`;
+  }).join("");
 }
 
 function resultsTemplate(scenario) {
-  const score = scoreResults(lab.results, deckExposure(scenario));
-  const gaps = lab.results
-    .filter((result) => result.outcome !== "neutralized")
-    .sort((a, b) => b.impact - a.impact)
-    .map((result) => {
-      const strengthen = strengthenTemplate(result);
-      return `${escapeHtml(result.incident.title)}: ${formatPercent(result.mitigation)} mitigated, −${formatImpact(result.impact)}${strengthen ? `. Strengthen with ${strengthen}` : ""}`;
-    }).join("<br>");
+  const run = summarizeRun(lab.results);
+  const score = scoreRoadmap(scenario, lab.roadmap);
+  const register = registerFor(scenario, lab.roadmap);
+  const other = runModes.find((item) => item.id !== lab.mode);
+  const header = `<span class="step-label">After-action report // ${escapeHtml(scenario.name)}</span>`;
+  const gaps = `<ol class="gap-list">${gapsTemplate(scenario, register)}</ol>`;
   return {
-    console: `<div class="sim-score"><p class="eyebrow">${score.tier.label}</p><div class="score-orbit"><strong>${score.readiness}</strong><span>% of projected<br>loss prevented<br>${score.passed ? "Roadmap held" : `Need ${passingReadiness}%`}</span></div><p>${score.tier.desc}</p></div>
-      <div class="stat-tiles"><span><strong>${score.defendedCount}</strong><small>Neutralized</small></span><span><strong>${score.containedCount}</strong><small>Contained</small></span><span><strong>${score.breachedCount}</strong><small>Breached</small></span><span><strong>${formatImpact(score.financialImpact)}</strong><small>Loss taken</small></span></div>${incidentLogTemplate(lab.results)}`,
+    console: `<div class="sim-score"><p class="eyebrow">${score.tier.label}</p><div class="score-orbit"><strong>${score.readiness}</strong><span>% of expected<br>loss removed<br>${score.passed ? "Roadmap held" : `Need ${passingReadiness}%`}</span></div><p>${score.tier.desc}</p></div>
+      <p class="stakes">This year's five incidents cost <b>${formatImpact(run.financialImpact)}</b>. Across all ${register.length} threats, ${escapeHtml(scenario.name)}'s expected loss is now <b>${formatImpact(score.loss.target)}</b>, down from ${formatImpact(score.loss.current)} on day one (${score.dayOne}% readiness) and ${formatImpact(score.loss.inherent)} with no controls.</p>
+      ${lossTiles(score.loss)}
+      <div class="stat-tiles"><span><strong>${run.defendedCount}</strong><small>Neutralized</small></span><span><strong>${run.containedCount}</strong><small>Contained</small></span><span><strong>${run.breachedCount}</strong><small>Breached</small></span><span><strong>${formatImpact(run.financialImpact)}</strong><small>Loss this year</small></span></div>${incidentLogTemplate(lab.results)}
+      <div class="actions"><button class="button secondary" id="other-year" type="button">See the other year: ${escapeHtml(other.label)} →</button>${score.passed ? '<button class="button secondary" data-action="rebuild" type="button">Rebuild roadmap</button>' : ""}</div><p class="resource-note">Same roadmap, the other way of picking five incidents. Your score doesn't change.</p>`,
     panel: score.passed
-      ? `<span class="step-label">After-action report // ${escapeHtml(scenario.name)}</span><h2>Roadmap verified.</h2><p>Your investments matched the threat intel closely enough to keep ${escapeHtml(scenario.name)} operating.</p>${budgetComparison(score, scenario)}<div class="feedback" id="feedback"></div><div class="actions"></div>`
-      : `<span class="step-label">After-action report // ${escapeHtml(scenario.name)}</span><h2>The roadmap did not hold.</h2>${budgetComparison(score, scenario)}<p>You prevented ${score.readiness}% of the projected loss; ${escapeHtml(scenario.name)} needs ${passingReadiness}%. The biggest gaps:</p><div class="feedback bad" id="feedback"><strong>Verification failed.</strong><br>${gaps}<br><small>Re-read the threat intel, rebalance or layer your controls, and launch again.</small></div><div class="actions"><button class="button" id="rebuild" type="button">Rebuild roadmap</button><button class="button secondary" id="change-scenario" type="button">Change company</button></div>`,
+      ? `${header}<h2>Roadmap verified.</h2><p>Your roadmap removed ${score.readiness}% of ${escapeHtml(scenario.name)}'s expected loss. No roadmap removes all of it. The biggest risks you're still carrying:</p>${gaps}${budgetComparison(run, scenario)}<div class="feedback" id="feedback"></div><div class="actions"></div>`
+      : `${header}<h2>The roadmap did not hold.</h2><p>Your roadmap removed ${score.readiness}% of ${escapeHtml(scenario.name)}'s expected loss; it needs ${passingReadiness}%. The biggest risks left:</p>${gaps}${budgetComparison(run, scenario)}<div class="feedback bad" id="feedback"><strong>Verification failed.</strong><br><small>Check what's holding your controls back, rebalance against the register, and launch again.</small></div><div class="actions"><button class="button" data-action="rebuild" type="button">Rebuild roadmap</button><button class="button secondary" id="change-scenario" type="button">Change company</button></div>`,
     passed: score.passed
   };
 }
@@ -379,34 +448,56 @@ function paintSimulator(focusSelector) {
   if (lab.phase === "results" && view.passed) completeMission("simulator");
 }
 
+function startRun(mode) {
+  Object.assign(lab, { phase: "incidents", index: 0, results: [], revealed: false, assessing: false, mode, run: incidentRun(activeScenario(), mode) });
+  paintSimulator("#assess");
+  document.querySelector("#sim-workspace").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+}
+
 function bindSimulator() {
-  lab = { phase: activeScenario() ? "build" : "briefing", index: 0, results: [], revealed: false, assessing: false };
+  lab = { phase: activeScenario() ? "build" : "briefing", index: 0, results: [], revealed: false, assessing: false, closedGroups: new Set() };
   const workspace = document.querySelector("#sim-workspace");
   paintSimulator();
 
   workspace.addEventListener("change", (event) => {
+    if (lab.phase !== "build") return;
+    const mode = event.target.closest('input[name="run-mode"]');
+    if (mode) {
+      state.sim.runMode = validRunMode(mode.value);
+      saveState();
+      paintSimulator(`input[name="run-mode"][value="${state.sim.runMode}"]`);
+      return;
+    }
     const input = event.target.closest('input[name="initiative"]');
-    if (!input || lab.phase !== "build") return;
+    if (!input) return;
     const scenario = activeScenario();
     const { activated } = state.sim;
     state.sim.activated = input.checked
       ? (canActivate(scenario, activated, input.value) ? [...activated, input.value] : activated)
       : activated.filter((id) => id !== input.value);
     saveState();
-    paintSimulator(`input[value="${input.value}"]`);
+    paintSimulator(`input[name="initiative"][value="${input.value}"]`);
   });
+
+  // Remember collapsed groups across repaints. toggle does not bubble, so listen in the capture phase.
+  workspace.addEventListener("toggle", (event) => {
+    const group = event.target.dataset?.group;
+    if (!group) return;
+    if (event.target.open) lab.closedGroups.delete(group);
+    else lab.closedGroups.add(group);
+  }, true);
 
   workspace.addEventListener("click", async (event) => {
     const scenarioCard = event.target.closest("[data-scenario]");
     if (scenarioCard) {
-      state.sim = { scenarioId: scenarioCard.dataset.scenario, activated: [] };
+      state.sim = { ...state.sim, scenarioId: scenarioCard.dataset.scenario, activated: [] };
       saveState();
       lab.phase = "build";
       paintSimulator();
       return;
     }
     if (event.target.closest("#change-scenario")) {
-      state.sim = { scenarioId: null, activated: [] };
+      state.sim = { ...state.sim, scenarioId: null, activated: [] };
       saveState();
       lab.phase = "briefing";
       paintSimulator();
@@ -414,12 +505,17 @@ function bindSimulator() {
     }
     if (event.target.closest("#launch")) {
       if (!state.sim.activated.length) return;
-      Object.assign(lab, { phase: "incidents", index: 0, results: [], revealed: false, assessing: false, roadmap: [...state.sim.activated] });
-      paintSimulator("#assess");
-      workspace.scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
+      lab.roadmap = [...state.sim.activated];
+      startRun(state.sim.runMode);
       return;
     }
-    if (event.target.closest("#rebuild")) {
+    if (event.target.closest("#other-year")) {
+      state.sim.runMode = runModes.find((item) => item.id !== lab.mode).id;
+      saveState();
+      startRun(state.sim.runMode);
+      return;
+    }
+    if (event.target.closest('[data-action="rebuild"]')) {
       lab.phase = "build";
       paintSimulator();
       return;
@@ -431,15 +527,14 @@ function bindSimulator() {
       paintSimulator();
       await wait(academyConfig.timing.assessMs);
       if (lab !== session) return;
-      const incident = incidentDeck(activeScenario())[lab.index];
-      lab.results.push(assessIncident(incident, lab.roadmap, activeScenario()));
+      lab.results.push(assessIncident(lab.run[lab.index], activeScenario(), lab.roadmap));
       lab.assessing = false;
       lab.revealed = true;
       paintSimulator("#next-incident");
       return;
     }
     if (event.target.closest("#next-incident")) {
-      const last = lab.index === incidentDeck(activeScenario()).length - 1;
+      const last = lab.index === lab.run.length - 1;
       if (last) lab.phase = "results";
       else { lab.index += 1; lab.revealed = false; }
       paintSimulator(last ? null : "#assess");
@@ -565,7 +660,7 @@ function printMap() {
 
 function completionTemplate() {
   const anyStarted = state.map.rows.some(isRowStarted);
-  return `<section class="completion"><div class="completion-card" role="dialog" aria-modal="true" aria-labelledby="completion-title"><img class="completion-logo" src="${academyConfig.assets.logo}" alt="OWASP space logo"><p class="eyebrow">Qualification confirmed</p><h1 id="completion-title">Welcome, <span>Commander.</span></h1><p>You learned the protocols, defended a roadmap under pressure, and built a plan you can take back to work. Tools do not make a program. Decisions do.</p><div class="lessons"><span>Know your why before you buy anything</span><span>Protect the capacity of the people who scale security</span><span>Prioritize by reachability and exploit context</span><span>Measure what drives action</span><span>Stack-rank by impact vs. effort, and finish what you start</span></div><div class="ctf-award"><span>Hackers Challenge CTF token</span><code id="ctf-token">${escapeHtml(academyConfig.ctfToken)}</code><button class="button" id="copy-token" type="button">Copy token</button></div><div class="actions completion-actions">${anyStarted ? '<button class="button secondary" id="print-completion" type="button">Print my map</button>' : ""}<button class="button secondary" id="reset-completion" type="button">Reset session</button></div></div></section>`;
+  return `<section class="completion"><div class="completion-card" role="dialog" aria-modal="true" aria-labelledby="completion-title"><img class="completion-logo" src="${academyConfig.assets.logo}" alt="OWASP space logo"><p class="eyebrow">Qualification confirmed</p><h1 id="completion-title">Welcome, <span>Commander.</span></h1><p>You learned the protocols, defended a roadmap under pressure, and built a plan you can take back to work. Tools do not make a program. Decisions do.</p><div class="lessons"><span>Know your why before you buy anything</span><span>Protect the capacity of the people who scale security</span><span>Prioritize by reachability and exploit context</span><span>Fund the foundations that make your tools work</span><span>Measure what drives action</span><span>Stack-rank by impact vs. effort, and finish what you start</span></div><div class="ctf-award"><span>Hackers Challenge CTF token</span><code id="ctf-token">${escapeHtml(academyConfig.ctfToken)}</code><button class="button" id="copy-token" type="button">Copy token</button></div><div class="actions completion-actions">${anyStarted ? '<button class="button secondary" id="print-completion" type="button">Print my map</button>' : ""}<button class="button secondary" id="reset-completion" type="button">Reset session</button></div></div></section>`;
 }
 
 function bindCompletion() {

@@ -1,6 +1,6 @@
 // Mission 03 content. Field prompts and examples are carried over from section
 // 05 BUILD of the Base44 "Build an AppSec Roadmap" page.
-import { costOf, findInitiative } from "./simulation.js";
+import { findInitiative, optionCost, postureOf } from "./simulation.js";
 
 export const buildIntro = "Stack-rank by impact vs. effort before assigning timelines — start with high-impact, lower-effort work to build credibility. If two initiatives compete for the same resource, pick one; a half-executed initiative is worse than a deferred one.";
 
@@ -93,14 +93,16 @@ export function rankRows(rows) {
     .map(({ row, index }) => ({ ...row, slot: index + 1, priority: priorityLabel(row) }));
 }
 
+// Upgrading a partial control imports as "Upgrade existing …", at the upgrade's cost.
 export function rowsFromSimulation(scenario, activatedIds) {
   return activatedIds.slice(0, maxRows).map((id) => {
     const initiative = findInitiative(id);
     if (!initiative || !scenario) return emptyRow();
-    const cost = costOf(initiative, scenario);
+    const cost = optionCost(scenario, id);
+    const upgrade = postureOf(scenario, id) === "partial";
     return {
       ...emptyRow(),
-      initiative: initiative.name,
+      initiative: `${upgrade ? "Upgrade existing " : ""}${initiative.name}`,
       goal: initiative.description,
       investment: `$${cost.budget}K and ${cost.weeks} engineer-weeks over ${scenario.months} months`
     };

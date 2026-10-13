@@ -7,7 +7,7 @@ This is the Commander track of the SAINTCON AppSec Academy, alongside the [Cadet
 ## Missions
 
 1. **The Command Protocols** (program components). Initiate the commands in four protocols (Define, Evaluate, Integrate, Measure) and pass a checkpoint for each one.
-2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), read its threat intel, fund initiatives within its budget and engineer-weeks, and prevent at least 60% of the projected loss from five incidents.
+2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), assess the controls it already runs, and fund or upgrade controls within its budget and engineer-weeks until expected loss across its 14-threat risk register falls by at least 66%. Then live through one possible year of five incidents.
 3. **The Commander's Map** (roadmap planning). Fill in up to three initiatives (what, why, metric, timeline, investment, impact, effort), watch them stack-rank by impact vs. effort, pass the final checkpoint, and print the map.
 
 Each mission follows the academy loop: gather evidence, make a decision, verify it. Wrong answers explain why they fail. Completing all three awards the **Mission Commander** qualification and the Hackers Challenge token.
@@ -38,7 +38,7 @@ ES modules mean opening `index.html` directly with a `file:` URL is not supporte
 npm test
 ```
 
-The tests cover checkpoint integrity, simulator scoring, the cost model, resource limits, ranking, and input sanitizing. They also brute-force every affordable roadmap to prove each simulator scenario can be won, that funding nothing loses, and that no scenario can afford every initiative.
+The tests cover checkpoint integrity, the risk registers, simulator scoring, foundations, starting posture, the cost model, resource limits, ranking, and input sanitizing. They also brute-force every affordable roadmap at every company (a fraction of a second) to prove each one is winnable but hard: the best roadmap clears the bar comfortably, no roadmap wins without funding a foundation, a small share of full-budget roadmaps pass, and every control appears in some winning roadmap.
 
 To see each company's difficulty and best roadmaps while tuning numbers:
 
@@ -53,17 +53,22 @@ Event copy, the CTF token, rank labels, image paths, color palette, and interact
 Content is isolated from the UI:
 
 - [`js/protocols.js`](js/protocols.js): Mission 01 protocol copy and checkpoints
-- [`js/simulation.js`](js/simulation.js): Mission 02 scenarios, initiatives, incidents, and scoring
+- [`js/simulation.js`](js/simulation.js): Mission 02 scenarios, risk registers, starting posture, controls, incidents, and scoring
 - [`js/roadmap.js`](js/roadmap.js): Mission 03 worksheet fields, ranking, and checkpoint
 
 ## Content source
 
 The protocol copy, simulator scenarios, initiatives, and incidents come from the Wasatch AppSec community app's "Build an AppSec Roadmap" and "Roadmap Simulator" pages, originally built on Base44. Changes from the original:
 
-- Each simulator scenario faces a fixed incident deck drawn from its threat profile, instead of 5 random incidents out of 8. Winning depends on reading the threat intel, not on luck.
-- Controls are partially effective and layer (SAST 70% + training 30% = 79% of code injection); incident response limits loss instead of preventing it. Readiness is the share of projected dollar loss prevented, and passing requires 60%. The original treated any matching control as 100% effective and scored fixed points per incident.
+- **Mission 02 was redesigned for SAINTCON 2026** (design specs and the calibration prototype are in [`docs/design/`](docs/design/)):
+  - **18 controls** instead of 10, grouped by the five OWASP SAMM business functions and mapped to BSIMM16 and SAMM v2, with costs benchmarked against 2025–26 pricing.
+  - **Four foundations** (Vulnerability Management, Inventory, Security Champions, Secure Coding Training) don't stop incidents themselves; each missing one cuts what the controls depending on it deliver.
+  - **14 threats and a risk register per company.** Readiness is the share of inherent expected loss (likelihood × impact across every threat) that the company's controls remove. Passing requires 66%.
+  - **A starting posture per company:** some controls are already in place or partial (including shelfware), and partial ones can be upgraded for half price.
+  - **The five incidents are "one possible year"**, picked from the register by the biggest threats or by the biggest gaps today. The original drew 5 random incidents out of 8.
+- Controls are partially effective and layer (SAST 70% + Secure Defaults 75% = 93% of injection); detection and incident response limit loss instead of preventing it. The original treated any matching control as 100% effective and scored fixed points per incident.
 - Timelines are 6, 12, and 18 months instead of 6 to 10 weeks, and capacity is measured in engineer-weeks instead of engineer-hours. Each initiative costs a one-time setup plus a monthly run cost over the company's timeline, scaled to its headcount (see the comment at the top of `js/simulation.js`). Each company remains a separate, standalone scenario, with budget and capacity sized from a staffing story shown on its card.
-- Incident financial impact is scaled to each company (size × sector exposure) instead of a flat $15K to $40K,, and readiness is computed from it.
+- Incident financial impact is scaled to each company (size × sector exposure) instead of a flat $15K to $40K, and readiness is computed from it.
 - Checkpoint questions were added to each protocol, written from that protocol's own guidance.
 
 ## Deployment notes
@@ -84,6 +89,8 @@ appsec-commander-academy/
 ├── js/roadmap.js       Mission 03 worksheet and ranking
 ├── js/app.js           UI, routing, progression, and mission flow
 ├── test/               Node built-in tests
+├── scripts/            Calibration: brute-forces every affordable roadmap
+├── docs/design/        Mission 02 design specs and prototype (not served)
 ├── Dockerfile          Production nginx image
 ├── docker-compose.yml  One-command local deployment
 ├── FACILITATOR.md      Booth operation and teaching notes

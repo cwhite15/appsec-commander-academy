@@ -1,6 +1,6 @@
 # Mission 02 redesign: design specs
 
-Design documents for the next version of Mission 02 (the Resource Gauntlet). The review round is complete; implementation is planned on the `risk-register` branch. Until then, the app on `main` still runs the original 10-control model.
+Design documents for the redesigned Mission 02 (the Resource Gauntlet). They are implemented in `js/simulation.js`, and `scripts/calibrate.mjs` reproduces the prototype's calibration with the real model. The specs are kept as the record of why the numbers are what they are; where they differ from `FACILITATOR.md`, the code and the facilitator guide win.
 
 | File | What it is |
 |---|---|

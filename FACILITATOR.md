@@ -3,8 +3,8 @@
 ## Intended experience
 
 - Audience: security leaders, engineering managers, and anyone asked to "start an AppSec program"
-- Time: about five minutes for Mission 01, five to eight for Mission 02, five for Mission 03
-- Assistance: if an attendee stalls in Mission 02, point them back at the threat intel box
+- Time: about five minutes for Mission 01, eight to twelve for Mission 02 (an estimate for 18 cards plus the register; re-check after a booth playthrough), five for Mission 03
+- Assistance: if an attendee stalls in Mission 02, point them at the risk register and at any card that says "Missing:"
 - Goal: understand what an AppSec program is made of, then practice the trade-offs of building one
 
 ## Answer key
@@ -22,54 +22,286 @@ Attendees can answer without initiating every command, but the readiness meter r
 
 ### Mission 02: The Resource Gauntlet
 
-Each company is a separate, standalone scenario. Nothing carries over between them, and attendees play one per run (they can switch with **Change company**).
+Each company is a separate, standalone scenario. Nothing carries over between them, and attendees play one per run (they can switch with **Change company**). The design specs behind this mission, including the full research notes, are in [`docs/design/`](docs/design/).
 
-Each company faces a fixed set of five incidents that matches its threat intel.
+#### The flow
+
+1. **Choose a company.** Each card shows its timeline, budget, capacity, staffing, and a one-line starting posture.
+2. **Build.** The build screen groups 18 controls under the five OWASP SAMM business functions. Each card shows its posture (**In place**, **Partial**, or nothing), what it's rated against, and a line such as *"Delivering 24% of 70% against injection. Missing: Vulnerability Management (−50%), Security Champions (−25%)."* The panel shows the budget, engineer-weeks, and the company's **risk register**, which updates live: inherent → today → your roadmap. A sticky bar above the cards shows the same totals on a phone.
+3. **Launch.** Five incidents play out as "one possible year". The attendee chooses how they're picked (see "The incident run").
+4. **After-action report.** It shows readiness and tier, this year's loss, the residual expected loss across the whole register, and the three biggest remaining risks, each with what's holding it back and what would strengthen it.
+
+There is deliberately **no pass/fail indicator before launch**, so the mission doesn't turn into "toggle until it reads 66%". The register's total expected loss is live, because that is how a program lead actually uses a register.
 
 #### How a roadmap is scored
 
-- **No control is perfect.** Each initiative removes a share of the loss from the threats it addresses (shown on its card), for example SAST 70% of code injection, Secure Coding Training 30%.
-- **Layered controls combine:** 1 − (1 − a)(1 − b). SAST plus training covers 79% of code injection, because each catches part of what the other misses. Adding the WAF takes it to 85%.
-- **Incident response limits damage rather than preventing it:** 60% of a data breach's loss, and 15% containment on every other incident.
-- **Readiness is the share of the company's projected loss, across all five incidents, that the roadmap prevented.** It follows dollars, so leaving a $600K breach uncovered scores worse than leaving a $120K IDOR uncovered.
-- **The bar is 60%.** Even the best affordable roadmaps leave 26–32% of the projected loss behind. That is a talking point: you cannot buy down all risk.
-- Each incident lands as **Threat neutralized** (75%+ mitigated), **Partially contained** (30–74%), or **Breach detected** (under 30%), with the controls in play and what would strengthen it.
+- **Risk register.** Every company rates all 14 threats with a likelihood. **Likelihood is the chance the incident happens at full impact within the company's timeline, not the chance that the weakness exists.** (A 0.55 for a secret leak at OrbitPay doesn't mean "a 55% chance a key ever leaks"; that is near-certain. It means a 55% chance of a leak that costs the full $230K within six months.) The same definition is on screen.
+- **Expected loss (EL)** = likelihood × impact, summed over the register:
+  - **Inherent:** no controls at all
+  - **Today:** the company's starting posture
+  - **Your roadmap:** the starting posture plus everything funded or upgraded
+- **Readiness = 1 − roadmap EL ÷ inherent EL.** What the company already runs counts toward the score.
+- **The bar is 66%: remove two-thirds of expected loss.** Tiers: Mission success ≥66, Partial success ≥55, Compromised ≥40, Mission failure <40. Day-one readiness is 21–26%.
+- **No control is perfect.** Each one removes a share of the loss from the threats it addresses, rated **assuming its foundations are in place**.
+- **Layered controls combine** as 1 − (1 − a)(1 − b). SAST (70%) plus Secure Defaults (75%) cover 93% of injection.
+- **Detection and Incident Response limit damage rather than prevent it.** Detection removes 40% of a breach's loss and contains 10% of every other incident. IR removes 60% of a breach and contains 15% of everything else, but only once something is detected (see foundations).
+- Each incident in the run lands as **Threat neutralized** (75%+ mitigated), **Partially contained** (30–74%), or **Breach detected** (under 30%).
 
-About 5–8% of affordable roadmaps pass at each company. The best ones:
+#### Foundations
 
-| Company | Timeline · budget · capacity | Staffing | Incidents | Best roadmap |
+Four controls are **foundations**. They don't stop incidents themselves; they make other controls work. Each missing foundation takes a fixed share of what the controls depending on it deliver:
+
+| Foundation | Penalty when missing | Supports | Evidence |
+|---|---|---|---|
+| **Vulnerability Management & SLAs** | −50% | SAST, SCA, Cloud Posture, DAST, Pen Testing: everything that produces findings | Cobalt 2025: only 48% of pen test findings are ever resolved. Veracode SoSS 2025: leaders fix more than 10% of flaws a month, laggards less than 1%. |
+| **Inventory, Risk Classification & Coverage Metrics** | −35% | MFA, Secrets, RBAC, WAF, Cloud Posture, Data Protection, Detection: estate-wide controls | IBM Cost of a Data Breach 2024: 35% of breaches involved shadow data |
+| **Security Champions** | −25% | SAST, Threat Modeling, RBAC, Pen Testing, Secure Defaults | Correlational only (BSIMM). Modeled as adoption and ownership. |
+| **Secure Coding Training** | −15% | SAST, DAST, Secure Defaults | Weak, mostly vendor evidence. Modeled as fix quality and paved-road adoption. |
+| **Detection** (a regular control) | −50%, IR only | Incident Response | An IR plan nobody triggers is a document. |
+
+- A **partial** foundation takes away half of its penalty.
+- Foundations don't boost each other. IR → Detection is the only chain.
+- Example: SAST is rated 70% against injection. With all three of its foundations it delivers 70%; without Training 60%; without Champions 53%; without Vulnerability Management 35%; with none of them 22%.
+
+#### Starting posture
+
+| State | Effect | Cost |
+|---|---|---|
+| **In place** | Full rating, still subject to foundation penalties | Free: its run cost is business as usual and isn't charged to the budget |
+| **Partial** | Half its rating. A partial foundation removes half of its penalty. | Free as is. **Upgrade** to full for half the control's full cost (dollars and engineer-weeks each rounded). |
+| **Not in place** | Nothing until funded | Full cost |
+
+**Shelfware isn't a separate state.** It's an in-place control whose foundations are missing, and the card says so.
+
+| Company | In place | Partial | Story |
+|---|---|---|---|
+| **OrbitPay** | none | SAST (CodeQL or Semgrep CE on some repos), SCA (Dependabot alerts, nobody assigned), Secrets (GitHub secret scanning; some teams use AWS Secrets Manager, others .env files), MFA (staff only), WAF (CDN free tier), Cloud Posture (basic registry image scanning) | 120 people, mostly engineers, so free tools are everywhere, but no coordination between teams, no tracking, and no definition of what security requires |
+| **MediSecure** | Data Protection (encryption at rest and in transit), Pen Testing (annual, because customers and auditors expect it) | IR (on paper, never exercised), Inventory (HIPAA risk analysis of ePHI systems), Training (annual HIPAA awareness), RBAC (annual user-access review), Detection (audit logs reviewed for the audit, not monitored) | An annual internal audit against its HIPAA policy proves compliance to leadership, so everything the policy names exists on paper. Pen test findings sit unfixed. |
+| **RetailRush** | SAST (bought two years ago, now shelfware), Pen Testing (annual, for PCI) | WAF (log-only), Detection (logs collected, nobody watches), MFA (admins only), Data Protection (processor tokenizes cards; customer PII isn't), Training (annual awareness, not secure coding) | Plenty of spend, little effect. Its partial controls double as latent PCI DSS findings. |
+
+#### The incident run
+
+The five incidents are "one possible year". The attendee picks how they're chosen with the **Incident run** toggle beside **Launch**. **The toggle never changes readiness, pass or fail, or tier**: the score always comes from all 14 threats. Both modes are deterministic (ties break by loss, then impact, then id).
+
+| Mode | Picks | OrbitPay | MediSecure | RetailRush |
 |---|---|---|---|---|
-| OrbitPay (120 people) | 6 months · $90K · 36 eng-weeks | First AppSec hire plus borrowed platform time | API key leak, SQL injection, credential stuffing, IDOR, vulnerable container | SAST, Secrets Vault, MFA, Container Scanning: 68% ($81K, 32 eng-weeks). Layering Secrets, MFA, RBAC, WAF and Training reaches 69%. |
-| MediSecure (80 people) | 12 months · $80K · 26 eng-weeks | Half-time security engineer plus two champions | Dependency CVE, IDOR, API key leak, vulnerable container, suspected breach | SCA, RBAC Audit, Secrets Vault, Incident Response Plan: 71% ($58K, 25 eng-weeks) |
-| RetailRush (200 people) | 18 months · $350K · 90 eng-weeks | Two-person AppSec team, about 60% on roadmap work | DDoS, dependency CVE, SQL injection, credential stuffing, suspected breach | SCA, MFA, WAF, Secure Coding Training, Incident Response Plan: 74% ($319K, 69 eng-weeks) |
+| **Biggest threats** (default) | Top 5 by inherent EL | Credential stuffing, SQL injection, API key leak, account takeover, IDOR | Dependency CVE, data breach, privilege escalation, API key leak, IDOR | Dependency CVE, credential stuffing, data breach, SQL injection, DDoS |
+| **Biggest gaps today** | Top 5 by EL after the starting posture (the roadmap never changes the pick) | Same five | Misconfiguration replaces IDOR | Logic flaw replaces SQL injection |
 
-Common misses worth coaching: a secrets vault does not stop credential stuffing (MFA does, and WAF rate limiting helps), and training alone does not fix a SQL injection already in production. At OrbitPay, a roadmap without MFA and SAST will not hold.
+On the after-action report, **See the other year** replays the five incidents in the other mode with the same roadmap. Use it for discussion:
+
+- *Biggest threats* keeps the shelfware story on screen: RetailRush's SQL injection card tests the SAST it already owns.
+- *Biggest gaps today* shows day-one prioritization, and puts RetailRush's logic-flaw card, and so Threat Modeling, in front of the attendee.
+- Coaching prompt: **"Why did SQL injection drop out of RetailRush's 'gaps today' run? Because the SAST you already own covers part of it. Is it working?"** (It delivers 24% of its 70% until Vulnerability Management, Champions, and Training are funded.)
+
+The run and the score can disagree. Winning roadmaps often neutralize only 2–4 of the five cards, which is why the results screen shows both this year's loss and the residual expected loss across the register.
+
+#### Difficulty and example roadmaps
+
+Every affordable roadmap at every company was enumerated (`node scripts/calibrate.mjs`; the tests repeat it).
+
+| Company | Timeline · budget · capacity | Staffing | Day one | Best | Best without funding a foundation | Full-budget roadmaps that pass | Winning roadmaps |
+|---|---|---|---|---|---|---|---|
+| OrbitPay (120 people) | 6 months · $90K · 48 eng-weeks | First AppSec hire plus most of a platform engineer on loan | 21% | 75% | 62% (fails) | 5.4% | 1,055 |
+| MediSecure (80 people) | 12 months · $80K · 34 eng-weeks | Half-time security engineer shared with compliance, plus two champions | 26% | 74% | 64% (fails) | 5.6% | 255 |
+| RetailRush (200 people) | 18 months · $250K · 105 eng-weeks | Two-person AppSec team, about 70% free for roadmap work | 25% | 77% | 63% (fails) | 3.8% | 128 |
+
+"Full-budget" means nothing else fits. Engineer-weeks, not dollars, are usually the binding constraint: winning roadmaps often leave dollars unspent.
+
+Example roadmaps (asserted in the tests; "upgrade" means a partial control brought to full):
+
+| Company | Roadmap | Readiness | Cost |
+|---|---|---|---|
+| OrbitPay | Inventory, Vulnerability Management, upgrade MFA, upgrade SCA, upgrade Secrets, upgrade Cloud Posture, DAST, Pen Testing, Incident Response (best) | 75% | $89K, 48 EW |
+| OrbitPay | Inventory, Secure Defaults, upgrade MFA, Detection, Incident Response (fewest controls that pass) | 66% | $34K, 44 EW |
+| MediSecure | upgrade Inventory, Vulnerability Management, SCA, upgrade RBAC, Cloud Posture, upgrade Detection, upgrade IR (best) | 74% | $61K, 34 EW |
+| MediSecure | Vulnerability Management, SCA, Cloud Posture, upgrade Detection, upgrade IR (lean) | 69% | $57K, 25 EW |
+| RetailRush | Inventory, Vulnerability Management, SCA, upgrade MFA, upgrade WAF, upgrade Detection, Incident Response (best) | 77% | $188K, 104 EW |
+| RetailRush | Inventory, Vulnerability Management, SCA, upgrade WAF, Incident Response | 69% | $129K, 80 EW |
+
+What the winning roadmaps have in common:
+
+- **OrbitPay:** every winner funds Inventory, and 78% fund Vulnerability Management. Coordinating the free tools it already has is the core move. 92% upgrade MFA. Upgrading all six free tools *without* foundations reaches only 40%; adding Inventory and Vulnerability Management lifts that to 64%, still short.
+- **MediSecure:** every winner funds Vulnerability Management and SCA, which also makes the existing pen test pay off (its findings start getting fixed). 70% upgrade the paper IR plan.
+- **RetailRush:** 79% fund Vulnerability Management, which unlocks the shelfware SAST and the pen test.
+- **Weak cards:** Secure Defaults (2–4% of winners), Champions (2–15%), and RBAC at RetailRush (4%). Threat Modeling appears in 13–28%. These are expected to improve when time-to-value is modeled, because their payoff is long-term.
+
+Common misses worth coaching:
+
+- **"Compliant on paper isn't secure."** MediSecure's controls exist because the HIPAA audit names them. RetailRush's log-only WAF, unwatched logs, admin-only MFA, and awareness-only training are also likely PCI DSS findings.
+- **"Fix what you have before you buy more."** A partial control is often the cheapest effect available, and a missing foundation can halve every tool that depends on it.
+- A secrets manager doesn't stop credential stuffing (MFA does, and WAF rate limiting helps), and training no longer stops anything on its own: it makes the tools work.
+
+#### Risk registers
+
+Likelihoods are estimates from each company's threat intel, not industry data. If one has to be defended on stage, tie it to a named report first (Verizon DBIR 2025 backs the high credential-stuffing likelihoods). Impact = base cost for a 100-person company × headcount/100 × sector multiplier (OrbitPay ×1.3 for payments fraud and PCI exposure, MediSecure ×1.5 for PHI notification and HIPAA penalties, RetailRush ×1.0 because its exposure is downtime and revenue), rounded to $10K. "Today" is EL after the starting posture. ★ marks the default run.
+
+**OrbitPay** (6 months, inherent EL $893K, today $706K)
+
+| # | Incident | Likelihood | Impact | Inherent EL | Today | Rationale |
+|---|---|---|---|---|---|---|
+| ★1 | Credential stuffing | 0.60 | $310K | $186K | $117K | Consumer payment logins are a prime stuffing target, and high transaction volume hides the attempts. |
+| ★2 | SQL injection in payment endpoint | 0.35 | $390K | $137K | $109K | Payment endpoints built fast with little review, and a SOC 2 readiness pen test is likely to find one. |
+| ★3 | API key leaked to public repo | 0.55 | $230K | $127K | $92K | Many AWS microservices and no vault, so keys live in code and CI. One push is enough. |
+| ★4 | Account takeover via password reset | 0.35 | $280K | $98K | $73K | Stored payout details make takeover pay, and reset and session flows haven't been hardened. |
+| ★5 | Broken access control (IDOR) | 0.45 | $160K | $72K | $72K | API-first microservices. Broken object-level authorization is the most common API flaw. |
+| 6 | Production debug endpoint exposed | 0.15 | $280K | $42K | $37K | Cloud-native with no security review of manifests, but the platform team owns the infrastructure. |
+| 7 | Suspected data breach | 0.05 | $780K | $39K | $39K | A full breach within 6 months is unlikely, but costly. |
+| 8 | Malicious package in the build | 0.08 | $470K | $38K | $32K | A young dependency tree, but CI holds cloud and payment credentials worth stealing. |
+| 9 | Dependency vulnerability exploited | 0.06 | $620K | $37K | $26K | Young codebase on current frameworks, and only a 6-month window. |
+| 10 | Vulnerable container deployed | 0.40 | $90K | $36K | $31K | Ships often with only basic image scanning. Likely, but a small loss. |
+| 11 | Privilege escalation to admin | 0.08 | $340K | $27K | $27K | Few internal roles yet, and the admin tooling is small. |
+| 12 | Business logic flaw | 0.08 | $310K | $25K | $25K | Payment logic is new, but little ships in 6 months. |
+| 13 | Stored XSS | 0.10 | $190K | $19K | $17K | Mostly an API back end with a thin customer UI. |
+| 14 | DDoS traffic spike | 0.05 | $230K | $12K | $8K | Not a peak-traffic business. |
+
+**MediSecure** (12 months, inherent EL $755K, today $558K)
+
+| # | Incident | Likelihood | Impact | Inherent EL | Today | Rationale |
+|---|---|---|---|---|---|---|
+| ★1 | Dependency vulnerability exploited | 0.45 | $480K | $216K | $195K | The legacy monolith carries years of unpatched dependencies while attention is on the migration. |
+| ★2 | Suspected data breach | 0.20 | $600K | $120K | $62K | Healthcare is a top ransomware and extortion target, and PHI sells. |
+| ★3 | Privilege escalation to admin | 0.30 | $260K | $78K | $38K | The role model is rebuilt service by service, so clinician, admin, and support roles drift. |
+| ★4 | API key leaked to public repo | 0.40 | $180K | $72K | $57K | Every new service needs credentials, and migrations copy them into configs and scripts. |
+| ★5 | Broken access control (IDOR) | 0.50 | $120K | $60K | $28K | New service boundaries move authorization checks. Patient-record APIs are the classic IDOR. |
+| 6 | Production debug endpoint exposed | 0.25 | $220K | $55K | $50K | New Kubernetes infrastructure stood up by a team that is new to it. |
+| 7 | Malicious package in the build | 0.08 | $360K | $29K | $26K | New services pull in packages quickly during the migration. |
+| 8 | Business logic flaw | 0.12 | $240K | $29K | $22K | New services, but mostly re-implementing existing behavior. |
+| 9 | Vulnerable container deployed | 0.40 | $70K | $28K | $25K | Brand-new images with no scanning. Frequent, but the loss is contained. |
+| 10 | Credential stuffing | 0.08 | $240K | $19K | $17K | Mostly clinician logins behind SSO, plus a small patient portal. |
+| 11 | Account takeover via password reset | 0.08 | $220K | $18K | $14K | SSO for clinicians limits takeover. |
+| 12 | SQL injection | 0.05 | $300K | $15K | $10K | A mature ORM in the monolith, reused by the new services. |
+| 13 | Stored XSS | 0.08 | $140K | $11K | $10K | Mostly internal-facing UIs. |
+| 14 | DDoS traffic spike | 0.03 | $180K | $5K | $5K | Not a traffic-driven business. |
+
+The close call: IDOR ($60K) is only just ahead of misconfiguration ($55K) for the fifth card.
+
+**RetailRush** (18 months, inherent EL $1.81M, today $1.37M)
+
+| # | Incident | Likelihood | Impact | Inherent EL | Today | Rationale |
+|---|---|---|---|---|---|---|
+| ★1 | Dependency vulnerability exploited | 0.50 | $800K | $400K | $362K | Legacy frameworks over 18 months. Known-CVE exploitation is the likeliest big hit. |
+| ★2 | Credential stuffing | 0.70 | $400K | $280K | $165K | Stored cards, loyalty points, and gift cards make retail a prime target, and the peaks bring cover traffic. |
+| ★3 | Suspected data breach | 0.20 | $1.0M | $200K | $160K | Card and customer data at 200-person scale over 18 months. |
+| ★4 | SQL injection | 0.40 | $500K | $200K | $105K | Hand-built SQL in legacy code that is being replaced, not fixed. |
+| ★5 | DDoS traffic spike | 0.65 | $300K | $195K | $137K | Two peak seasons in the window, and extortion DDoS targets peaks. |
+| 6 | Business logic flaw | 0.35 | $400K | $140K | $115K | The re-platform rebuilds checkout, promotions, and refunds across many teams: coupon stacking, refund replay. |
+| 7 | Account takeover via password reset | 0.25 | $360K | $90K | $55K | Gift card and loyalty balances can be cashed out. |
+| 8 | Malicious package in the build | 0.12 | $600K | $72K | $70K | A large re-platform pulls in hundreds of new packages across many teams. |
+| 9 | Stored XSS | 0.30 | $240K | $72K | $55K | Legacy front end with a lot of user content (reviews, Q&A). |
+| 10 | API key leaked to public repo | 0.15 | $300K | $45K | $41K | A larger team with an established ops practice. |
+| 11 | Production debug endpoint exposed | 0.12 | $360K | $43K | $42K | A new platform, but run by an established ops team. |
+| 12 | Broken access control (IDOR) | 0.15 | $200K | $30K | $22K | Order-history and address APIs. |
+| 13 | Vulnerable container deployed | 0.20 | $120K | $24K | $23K | The new platform will be containerized. Small loss. |
+| 14 | Privilege escalation to admin | 0.05 | $440K | $22K | $16K | Few user roles, and the admin side is internal. |
+
+The malicious-package likelihoods (0.08 / 0.08 / 0.12) and rationales are newer estimates than the rest of the register. Sonatype counted 704K malicious packages by October 2024, up 156% year over year.
+
+#### The catalog
+
+Costs are per 100 people (about 50 engineers), scaled by headcount, as one-time setup plus monthly run over the timeline. Setup dollars are mostly $0 because SaaS tools rarely charge setup fees; setup is engineering time. Exceptions: MFA $5K (hardware keys), Threat Modeling $5K (coaching), IR $5K (tabletop facilitation), RBAC $2K (external review), Pen Testing $25K (first engagement).
+
+| Control | SAMM function | Rated against | Needs | OrbitPay | MediSecure | RetailRush |
+|---|---|---|---|---|---|---|
+| Secure Coding Training | Governance | Foundation | — | $7K / 5 EW | partial; upgrade $5K / 3 EW | partial; upgrade $18K / 10 EW |
+| Security Champions Program | Governance | Foundation | — | $6K / 8 EW | $8K / 8 EW | $29K / 28 EW |
+| Inventory, Risk Classification & Coverage Metrics | Governance | Foundation | — | $4K / 8 EW | partial; upgrade $3K / 4 EW | $18K / 21 EW |
+| Threat Modeling & Security Requirements | Design | Logic flaw 70%, access control 40%, privilege escalation 30% | Champions | $9K / 7 EW | $10K / 7 EW | $23K / 24 EW |
+| Secure Defaults & Paved Roads | Design | Injection 75%, XSS 75%, access control 50%, misconfiguration 30%, secret leak 30% | Champions, Training | $0K / 16 EW | $0K / 13 EW | $0K / 38 EW |
+| MFA & Auth Hardening | Design | Credential stuffing 85%, account takeover 80% | Inventory | partial; upgrade $5K / 4 EW | $11K / 6 EW | partial; upgrade $14K / 9 EW |
+| SCA & Supply Chain Integrity | Implementation | Dependency CVE 80%, malicious package 60% | Vuln Mgmt | partial; upgrade $5K / 3 EW | $12K / 4 EW | $45K / 15 EW |
+| Secrets Management & Push Protection | Implementation | Secret leak 85% | Inventory | partial; upgrade $7K / 6 EW | $17K / 9 EW | $65K / 27 EW |
+| Vulnerability Management & SLAs | Implementation | Foundation | — | $7K / 8 EW | $10K / 8 EW | $36K / 26 EW |
+| SAST Pipeline Scanning | Verification | Injection 70%, XSS 60% | Vuln Mgmt, Champions, Training | partial; upgrade $6K / 3 EW | $14K / 6 EW | in place |
+| DAST & API Security Testing | Verification | XSS 50%, injection 40%, access control 30%, misconfiguration 30% | Vuln Mgmt, Training | $16K / 6 EW | $22K / 6 EW | $81K / 20 EW |
+| Pen Testing, Bug Bounty & VDP | Verification | Access control 50%, privilege escalation 50%, logic flaw 40%, injection 40%, account takeover 30% | Vuln Mgmt, Champions | $31K / 5 EW | in place | in place |
+| RBAC & Authorization Audit | Verification | Access control 80%, privilege escalation 70% | Inventory, Champions | $2K / 12 EW | partial; upgrade $1K / 5 EW | $2K / 27 EW |
+| WAF, Bot & DDoS Protection | Operations | DDoS 85%, credential stuffing 40%, injection 30%, dependency CVE 20% | Inventory | partial; upgrade $3K / 2 EW | $7K / 3 EW | partial; upgrade $14K / 5 EW |
+| Container & Cloud Posture | Operations | Vulnerable container 80%, misconfiguration 75%, dependency CVE 30% | Vuln Mgmt, Inventory | partial; upgrade $7K / 3 EW | $19K / 6 EW | $72K / 20 EW |
+| Data Protection | Operations | Breach 25%, injection 20%, access control 20%, privilege escalation 20%, secret leak 15% | Inventory | $7K / 11 EW | in place | partial; upgrade $18K / 12 EW |
+| Security Logging, Monitoring & Detection | Operations | Breach 40%, credential stuffing 20%, account takeover 20%, every other incident 10% | Inventory | $18K / 11 EW | partial; upgrade $12K / 5 EW | partial; upgrade $45K / 15 EW |
+| Incident Response Plan | Operations | Breach 60%, every other incident 15% | Detection | $7K / 5 EW | partial; upgrade $4K / 2 EW | $16K / 13 EW |
+
+Framework mappings (BSIMM16 activities; SAMM v2 practice / stream):
+
+| Control | BSIMM16 | SAMM v2 |
+|---|---|---|
+| Secure Coding Training | T1.1, T1.7, T2.9 | Education & Guidance / Training and Awareness |
+| Security Champions | SM2.3, T2.5, T3.6 | Education & Guidance / Organization and Culture |
+| Inventory & Coverage Metrics | SM3.1, AA1.4, CMVM2.3 | Threat Assessment / Application Risk Profile; Strategy & Metrics / Measure and Improve |
+| Threat Modeling & Requirements | AA1.2, AM2.1, SR1.3 | Threat Assessment / Threat Modeling; Security Requirements / Software Requirements |
+| Secure Defaults & Paved Roads | SFD1.1, SFD2.1, SFD3.2 | Secure Architecture / Architecture Design, Technology Management |
+| MFA & Auth Hardening | SFD1.1, SR1.1, AA1.1 | Security Requirements / Software Requirements |
+| SCA & Supply Chain | SR1.5, SR2.7, SE3.6 | Secure Build / Software Dependencies |
+| Secrets & Push Protection | SE3.9, SFD1.1 | Secure Deployment / Secret Management |
+| Vulnerability Management & SLAs | CMVM1.3, PT1.2, CMVM3.1 | Defect Management / Defect Tracking (level 3: enforce an SLA) |
+| SAST | CR1.4, CR2.6, CR1.5 | Security Testing / Scalable Baseline |
+| DAST & API Testing | ST1.4, ST2.6, ST2.5 | Security Testing / Scalable Baseline |
+| Pen Testing, Bounty & VDP | PT1.1, PT2.3, CMVM3.4, CMVM2.4 | Security Testing / Deep Understanding |
+| RBAC & Authorization Audit | AA1.1, SFD2.1, ST1.3 | Requirements-driven Testing / Control Verification |
+| WAF, Bot & DDoS | SE1.1, SE1.2 | Environment Management / Configuration Hardening |
+| Container & Cloud Posture | SE1.3, SE2.7, CMVM3.5 | Environment Management / Configuration Hardening |
+| Data Protection | CP2.1, CP1.2, AM1.2 | Operational Management / Data Protection |
+| Logging, Monitoring & Detection | SE1.1, SE3.3, CMVM1.2 | Incident Management / Incident Detection |
+| Incident Response | CMVM1.1, CMVM1.4, CMVM3.3 | Incident Management / Incident Response |
+
+Honesty notes: neither framework names MFA, WAF/bot/DDoS, tokenization, or push-blocking secret scanning (both are process models, so these map to general practices). BSIMM has no activity for internal remediation SLAs; SAMM does. Recheck the BSIMM IDs when BSIMM17 is published (likely around February 2027).
+
+Evidence behind the ratings, for questions at the booth:
+
+- **MFA 85%** is deliberately below Microsoft Research's 99.2% (Meyer et al. 2023), to allow for coverage gaps and phishable factors. That's why MFA needs Inventory.
+- **Detection and IR:** IBM 2025 found breaches contained in under 200 days cost $3.87M vs. $5.01M, and internally discovered breaches cost less than attacker-disclosed ones.
+- **Secure Defaults 75%:** Google's safe-coding frameworks "nearly eliminated" XSS and SQL injection where adopted. Adoption is why it needs Champions and Training.
+- **Data Protection** was lowered to 25% against breach because IBM 2025 puts encryption at about −$208K per breach.
+- **Pen testing vs. scanners:** missing access control is the #2 pen test finding (Cobalt 2025), and scanners miss logic-flaw classes. There is no published split of human- vs. tool-found criticals, so don't quote one on stage.
+
+#### Regulatory talking points
+
+Verified against the regulation text (45 CFR on Cornell LII, PCI DSS v4.0.1, AICPA TSP 100):
+
+| Posture item | Driver | Note |
+|---|---|---|
+| MediSecure IR plan (partial) | HIPAA 164.308(a)(6)(ii), required | The rule requires procedures and documentation, not exercises. "On paper, never exercised" is plausibly compliant, and that's the point. |
+| MediSecure inventory (partial) | 164.308(a)(1)(ii)(A) risk analysis, required | Covers ePHI systems, not an engineering service inventory |
+| MediSecure data protection (in place) | 164.312(a)(2)(iv), 164.312(e)(2)(ii), addressable | Addressable doesn't mean optional (164.306(d)(3)) |
+| MediSecure pen test (in place) | 164.308(a)(8) evaluation | **HIPAA doesn't explicitly require pen testing today.** It's there because customers and auditors expect it. |
+| MediSecure RBAC (partial) | 164.308(a)(4), esp. (a)(4)(ii)(C), addressable | HIPAA requires access review but **sets no frequency**. "Annual" is practice, not regulation. |
+| MediSecure detection (partial) | 164.312(b) audit controls; 164.308(a)(1)(ii)(D) activity review, required; 164.308(a)(5)(ii)(C) log-in monitoring | Having logs meets 164.312(b). Reviewing them only for the audit is weak against "regularly review". Present it as a risk-based gap, not a clear violation. |
+| RetailRush WAF (log-only) | PCI DSS 6.4.2, required since 31 Mar 2025 | Must block attacks or alert for immediate investigation. Log-only and unwatched is a finding waiting to happen. |
+| RetailRush detection (partial) | PCI 10.4.1, 10.4.1.1 automated review | "Logs collected, nobody watches" is a 10.4.1 gap |
+| RetailRush MFA (admins only) | PCI 8.4.1, 8.4.2 | PCI doesn't require customer MFA (which is what the control mainly buys). Admin-only may fall short of 8.4.2. |
+| RetailRush training (partial) | PCI 6.2.2 | Requires secure coding training for developers every 12 months. Awareness-only is another latent gap. |
+| RetailRush pen test (in place) | PCI 11.4.1–11.4.3 | At least every 12 months and after significant changes |
+| OrbitPay (SOC 2 window) | AICPA TSC CC6, CC7, CC8 | **SOC 2 prescribes no specific controls.** Nothing forced OrbitPay to build anything yet. |
+
+The HHS proposed HIPAA Security Rule update (90 FR 898, January 2025) would add an asset inventory, annual pen tests, and real-time activity monitoring. **It is not final** (Long-Term Actions, target 07/2027). Re-check reginfo.gov and federalregister.gov before quoting it, and download PCI DSS v4.0.1 from the PCI SSC library before quoting it word for word.
 
 #### Incident impact
 
-Each incident shows its potential cost before it is assessed, the loss avoided when it is defended, and the loss when it gets through. Costs are scaled to each company: a baseline for a 100-person company (response, forensics, fraud, notification, downtime, lost revenue) × company size × sector exposure. OrbitPay is ×1.3 for payments fraud and PCI exposure, MediSecure ×1.5 for PHI breach notification and HIPAA penalties, and RetailRush ×1.0 because its exposure is downtime and revenue at scale. Starred incidents are in that company's deck.
+| Incident | Severity | OrbitPay | MediSecure | RetailRush |
+|---|---|---|---|---|
+| Dependency vulnerability exploited | critical | $620K | $480K | $800K |
+| API key leaked to public repo | high | $230K | $180K | $300K |
+| Credential stuffing | high | $310K | $240K | $400K |
+| Broken access control (IDOR) | critical | $160K | $120K | $200K |
+| Vulnerable container deployed | medium | $90K | $70K | $120K |
+| DDoS traffic spike | medium | $230K | $180K | $300K |
+| SQL injection | critical | $390K | $300K | $500K |
+| Suspected data breach | high | $780K | $600K | $1.0M |
+| Stored XSS in support console | high | $190K | $140K | $240K |
+| Account takeover via password reset | high | $280K | $220K | $360K |
+| Business logic flaw in a new feature | high | $310K | $240K | $400K |
+| Privilege escalation to admin | critical | $340K | $260K | $440K |
+| Production debug endpoint exposed | high | $280K | $220K | $360K |
+| Malicious package in the build | critical | $470K | $360K | $600K |
 
-| Incident | OrbitPay | MediSecure | RetailRush |
-|---|---|---|---|
-| Dependency vulnerability exploited | $620K | *$480K | *$800K |
-| API key leaked to public repo | *$230K | *$180K | $300K |
-| Credential stuffing | *$310K | $240K | *$400K |
-| Broken access control (IDOR) | *$160K | *$120K | $200K |
-| Vulnerable container deployed | *$90K | *$70K | $120K |
-| DDoS traffic spike | $230K | $180K | *$300K |
-| SQL injection in payment endpoint | *$390K | $300K | *$500K |
-| Suspected data breach | $780K | *$600K | *$1.0M |
-| **Whole deck, unprotected** | **$1.2M** (budget $90K) | **$1.4M** (budget $80K) | **$3.0M** (budget $350K) |
-
-Readiness is computed from these dollar figures. The results screen also compares the loss taken with the program budget, which is the talking point: one bad incident usually costs more than the whole program.
-
-Failed runs list the biggest gaps by dollars lost, each with the control that would strengthen it. **Rebuild roadmap** keeps the current selection.
+The results screen compares this year's loss with the program budget. That's the talking point: one bad year usually costs more than the whole program.
 
 ### Mission 03: The Commander's Map
 
 Correct checkpoint answer: **Pick the higher-impact initiative and defer the other.** A half-executed initiative is worse than a deferred one.
 
-Locking the map also requires one initiative with every field filled in. **Start from my simulator roadmap** pre-fills the initiative, goal, and investment (dollars and engineer-weeks for that company's timeline) from Mission 02, and the attendee adds the metric, timeline, impact, and effort. The stack rank orders by impact (high first), then effort (low first):
+Locking the map also requires one initiative with every field filled in. **Start from my simulator roadmap** pre-fills the initiative, goal, and investment (dollars and engineer-weeks for that company's timeline) from the first three controls in the Mission 02 roadmap, and the attendee adds the metric, timeline, impact, and effort. An upgraded partial control imports as "Upgrade existing …" at the upgrade's cost, and foundations import as their own rows. The stack rank orders by impact (high first), then effort (low first):
 
 - **Quick win**: impact higher than effort. Start here to build credibility.
 - **Planned investment**: impact equals effort, moderate or high.
