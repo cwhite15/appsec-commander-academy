@@ -1,0 +1,28 @@
+{
+ "orbitpay": {
+  "sast": "partial",
+  "sca": "partial",
+  "secrets": "partial",
+  "mfa": "partial",
+  "waf": "partial",
+  "cloud": "partial"
+ },
+ "medisecure": {
+  "data_protection": "in",
+  "pentest": "in",
+  "ir": "partial",
+  "inventory": "partial",
+  "training": "partial",
+  "rbac": "partial",
+  "detection": "partial"
+ },
+ "retailrush": {
+  "sast": "in",
+  "pentest": "in",
+  "waf": "partial",
+  "detection": "partial",
+  "mfa": "partial",
+  "data_protection": "partial",
+  "training": "partial"
+ }
+}

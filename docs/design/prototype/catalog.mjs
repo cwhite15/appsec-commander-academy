@@ -1,0 +1,21 @@
+// Benchmarked costs per 100 people (~50 engineers): [setupK, monthlyK, setupWeeks, monthlyWeeks]
+export const controls = {
+  sast:            { cost: [0, 1.5, 3, 0.4],   mit: { code_injection: 0.7, xss: 0.6 }, needs: ["vuln_mgmt", "champions", "training"] },
+  sca:             { cost: [0, 1.25, 2, 0.3],  mit: { dependency_vuln: 0.8, supply_chain: 0.6 }, needs: ["vuln_mgmt"] },
+  secrets:         { cost: [0, 1.8, 8, 0.3],   mit: { secret_leak: 0.85 }, needs: ["inventory"] },
+  mfa:             { cost: [5, 0.6, 5, 0.2],   mit: { credential_stuffing: 0.85, account_takeover: 0.8 }, needs: ["inventory"] },
+  threat_modeling: { cost: [5, 0.5, 3, 0.5],     mit: { design_flaw: 0.7, authz_flaw: 0.4, privilege_escalation: 0.3 }, needs: ["champions"] },
+  rbac:            { cost: [2, 0, 8, 0.3],     mit: { authz_flaw: 0.8, privilege_escalation: 0.7 }, needs: ["inventory", "champions"] },
+  waf:             { cost: [0, 0.75, 1.5, 0.2], mit: { ddos: 0.85, credential_stuffing: 0.4, code_injection: 0.3, dependency_vuln: 0.2 }, needs: ["inventory"] },
+  cloud:           { cost: [0, 2, 3, 0.4],     mit: { container_vuln: 0.8, misconfiguration: 0.75, dependency_vuln: 0.3 }, needs: ["vuln_mgmt", "inventory"] },
+  dast:            { cost: [0, 2.25, 3, 0.4],  mit: { code_injection: 0.4, xss: 0.5, authz_flaw: 0.3, misconfiguration: 0.3 }, needs: ["vuln_mgmt", "training"] },
+  pentest:         { cost: [25, 0.8, 2, 0.3],  mit: { authz_flaw: 0.5, privilege_escalation: 0.5, design_flaw: 0.4, code_injection: 0.4, account_takeover: 0.3 }, needs: ["vuln_mgmt", "champions"] },
+  secure_defaults: { cost: [0, 0, 10, 0.5],    mit: { code_injection: 0.75, xss: 0.75, authz_flaw: 0.5, misconfiguration: 0.3, secret_leak: 0.3 }, needs: ["champions", "training"] },
+  data_protection: { cost: [0, 1, 8, 0.2],     mit: { breach: 0.25, code_injection: 0.2, authz_flaw: 0.2, privilege_escalation: 0.2, secret_leak: 0.15 }, needs: ["inventory"] },
+  detection:       { cost: [0, 2.5, 6, 0.5],   mit: { breach: 0.4, credential_stuffing: 0.2, account_takeover: 0.2 }, all: 0.1, needs: ["inventory"] },
+  ir:              { cost: [5, 0.3, 3, 0.2],   mit: { breach: 0.6 }, all: 0.15, needs: ["detection"] },
+  vuln_mgmt:       { cost: [0, 1, 4, 0.5],     mit: {}, needs: [], foundation: true },
+  champions:       { cost: [0, 0.8, 3, 0.6],   mit: {}, needs: [], foundation: true },
+  training:        { cost: [0, 1, 1, 0.5],     mit: {}, needs: [], foundation: true },
+  inventory:       { cost: [0, 0.5, 5, 0.3],   mit: {}, needs: [], foundation: true },
+};
