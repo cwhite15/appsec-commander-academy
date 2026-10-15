@@ -59,7 +59,7 @@ a { color: var(--cyan); }
 .text-button:hover { color: var(--paper); }
 
 main { min-height: calc(100vh - 132px); }
-.hero { min-height: 680px; padding: clamp(4rem, 9vw, 8rem) clamp(1rem, 8vw, 8rem); display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; position: relative; overflow: hidden; border-bottom: 1px solid var(--line); background-image: linear-gradient(90deg, rgba(12,17,22,.97) 0%, rgba(12,17,22,.88) 34%, rgba(12,17,22,.38) 62%, rgba(12,17,22,.08) 100%), linear-gradient(0deg, rgba(12,17,22,.72), transparent 48%), url("./saintcon-appsec-hero.png"); background-position: center, center, center; background-size: cover, cover, cover; background-repeat: no-repeat; }
+.hero { min-height: 680px; padding: clamp(4rem, 9vw, 8rem) clamp(1rem, 8vw, 8rem); display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; position: relative; overflow: hidden; border-bottom: 1px solid var(--line); background-image: linear-gradient(90deg, rgba(12,17,22,.97) 0%, rgba(12,17,22,.88) 34%, rgba(12,17,22,.38) 62%, rgba(12,17,22,.08) 100%), linear-gradient(0deg, rgba(12,17,22,.72), transparent 48%), url("./saintcon-appsec-hero.webp"); background-position: center, center, center; background-size: cover, cover, cover; background-repeat: no-repeat; }
 .hero::after { content: ""; position: absolute; inset: 1.5rem; border: 1px solid rgba(115,229,241,.12); pointer-events: none; clip-path: polygon(0 0, 9% 0, 9% 1px, 91% 1px, 91% 0, 100% 0, 100% 100%, 91% 100%, 91% calc(100% - 1px), 9% calc(100% - 1px), 9% 100%, 0 100%); }
 .hero-copy { max-width: 620px; position: relative; z-index: 2; padding: clamp(1.25rem, 3vw, 2.25rem); border-left: 3px solid var(--cyan); background: rgba(12,17,22,.62); backdrop-filter: blur(3px); box-shadow: 0 20px 60px rgba(0,0,0,.26); }
 .eyebrow { margin: 0 0 1.2rem; color: var(--amber); font-size: .72rem; }
@@ -272,7 +272,7 @@ footer { min-height: 56px; display: flex; justify-content: space-between; align-
   .brand strong { font-size: .86rem; }
   .text-button { font-size: .55rem; }
   .brand-logo { width: 58px; height: 40px; }
-  .hero { background-image: linear-gradient(rgba(12,17,22,.66), rgba(12,17,22,.94)), url("./saintcon-appsec-hero.png"); background-position: center, 58% center; background-size: cover, cover; }
+  .hero { background-image: linear-gradient(rgba(12,17,22,.66), rgba(12,17,22,.94)), url("./saintcon-appsec-hero.webp"); background-position: center, 58% center; background-size: cover, cover; }
   .hero-copy { backdrop-filter: none; }
   .curriculum-intro { grid-template-columns: 1fr; }
   .curriculum-intro img { width: 100px; }

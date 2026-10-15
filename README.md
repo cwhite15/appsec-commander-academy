@@ -100,4 +100,4 @@ appsec-commander-academy/
 
 ## Artwork
 
-The OWASP space logo, SAINTCON AppSec hero, recruitment poster, academy-ranks graphic, and fonts in `assets/` are the shared academy assets from the Cadet and Officer academies.
+The OWASP space logo, academy-ranks graphic, and fonts in `assets/` are the shared academy assets from the Cadet and Officer academies. The Commander academy has its own hero image (`saintcon-appsec-hero.webp`, the mission control "AppSec Program Launch" scene) and gray-background "AppSec Needs You" recruitment poster (`appsec-needs-you.png`).
