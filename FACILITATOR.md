@@ -3,7 +3,7 @@
 ## Intended experience
 
 - Audience: security leaders, engineering managers, and anyone asked to "start an AppSec program"
-- Time: about five minutes for Mission 01, eight to twelve for Mission 02 (an estimate for 18 cards plus the register; re-check after a booth playthrough), five for Mission 03
+- Time: about five minutes for Mission 01, ten to fifteen for Mission 02 (an estimate for 18 cards, start months, and the register; re-check after a booth playthrough), five for Mission 03
 - Assistance: if an attendee stalls in Mission 02, point them at the risk register and at any card that says "Missing:"
 - Goal: understand what an AppSec program is made of, then practice the trade-offs of building one
 
@@ -27,11 +27,11 @@ Each company is a separate, standalone scenario. Nothing carries over between th
 #### The flow
 
 1. **Choose a company.** Each card shows its timeline, budget, capacity, staffing, and a one-line starting posture.
-2. **Build.** The build screen groups 18 controls under the five OWASP SAMM business functions. Each card shows its posture (**In place**, **Partial**, or nothing), what it's rated against, and a line such as *"Delivering 24% of 70% against injection. Missing: Vulnerability Management (−50%), Security Champions (−25%)."* The panel shows the budget, engineer-weeks, and the company's **risk register**, which updates live: inherent → today → your roadmap. A sticky bar above the cards shows the same totals on a phone.
-3. **Launch.** Five incidents play out as "one possible year". The attendee chooses how they're picked (see "The incident run").
-4. **After-action report.** It shows readiness and tier, this year's loss, the residual expected loss across the whole register, and the three biggest remaining risks, each with what's holding it back and what would strengthen it.
+2. **Build.** The build screen groups 18 controls under the five OWASP SAMM business functions. Each card shows its posture (**In place**, **Partial**, or nothing), what it's rated against, how long it takes to ramp up, and a line such as *"Delivering 24% of 70% against injection by the end. Missing: Vulnerability Management (−50%), Security Champions (−25%)."* Funding a card places it at the earliest start month that still fits, and a **Start** picker under the card (Now, +3, +6, +12 months, where the timeline allows) moves it. Months that no longer fit are greyed out. The panel shows the budget, engineer-weeks **per phase**, and the company's **risk register**, which updates live: inherent → today → your roadmap. A sticky bar above the cards shows the same totals on a phone.
+3. **Launch.** Five incidents play out as "one possible year", each landing in a set month on a timeline strip. Each one is met by whatever had ramped up by then: *"Secrets Management (38% ramped)"*, *"Not started yet: the upgrade to MFA (starts after 12 months)"*. The attendee chooses how the five are picked (see "The incident run").
+4. **After-action report.** It shows readiness and tier, this year's loss, the expected loss during the timeline and at handover, and the three biggest remaining risks, each with what's holding it back and what would strengthen it.
 
-There is deliberately **no pass/fail indicator before launch**, so the mission doesn't turn into "toggle until it reads 66%". The register's total expected loss is live, because that is how a program lead actually uses a register.
+There is deliberately **no pass/fail indicator before launch**, so the mission doesn't turn into "toggle until it reads 62%". The register's total expected loss is live, because that is how a program lead actually uses a register.
 
 #### How a roadmap is scored
 
@@ -40,8 +40,12 @@ There is deliberately **no pass/fail indicator before launch**, so the mission d
   - **Inherent:** no controls at all
   - **Today:** the company's starting posture
   - **Your roadmap:** the starting posture plus everything funded or upgraded
-- **Readiness = 1 − roadmap EL ÷ inherent EL.** What the company already runs counts toward the score.
-- **The bar is 66%: remove two-thirds of expected loss.** Tiers: Mission success ≥66, Partial success ≥55, Compromised ≥40, Mission failure <40. Day-one readiness is 21–26%.
+- **Controls take time.** Each funded control starts in a chosen month and ramps up linearly to full strength over its ramp time: 1 month (SCA, WAF), 2 (Vulnerability Management, Inventory, DAST, Pen Testing, Cloud Posture, IR), 3 (Training, MFA, SAST, Detection), 4 (Champions, Secrets, RBAC, Data Protection), or 6 (Threat Modeling, Secure Defaults). An **upgraded** partial control starts at 50% and ramps to full in half the time.
+- **Expected loss is spread evenly over the timeline's months,** and each month is mitigated by whatever has ramped up by then.
+- **The score counts two things equally:** the expected loss **during** the timeline and the run rate you **hand over** at the end (the last month). That's how a program lead reports to a board: what we lost this year, and where we left the company. Quick wins help the first half; lasting capability helps the second.
+- **Readiness = 1 − roadmap EL ÷ inherent EL,** where roadmap EL is that 50/50 blend. What the company already runs counts toward the score.
+- **The bar is 62%.** Tiers: Mission success ≥62, Partial success ≥50, Compromised ≥35, Mission failure <35. Day-one readiness is 21–26%.
+- **Threat Modeling and Secure Defaults protect only new code.** Their effect is scaled by the share of each company's exposure in code written during the timeline: OrbitPay 0.6, MediSecure 0.5, RetailRush 0.7 (estimates). Logic flaws are exempt, because the logic-flaw card is a new feature by definition.
 - **No control is perfect.** Each one removes a share of the loss from the threats it addresses, rated **assuming its foundations are in place**.
 - **Layered controls combine** as 1 − (1 − a)(1 − b). SAST (70%) plus Secure Defaults (75%) cover 93% of injection.
 - **Detection and Incident Response limit damage rather than prevent it.** Detection removes 40% of a breach's loss and contains 10% of every other incident. IR removes 60% of a breach and contains 15% of everything else, but only once something is detected (see foundations).
@@ -68,7 +72,7 @@ Four controls are **foundations**. They don't stop incidents themselves; they ma
 | State | Effect | Cost |
 |---|---|---|
 | **In place** | Full rating, still subject to foundation penalties | Free: its run cost is business as usual and isn't charged to the budget |
-| **Partial** | Half its rating. A partial foundation removes half of its penalty. | Free as is. **Upgrade** to full for half the control's full cost (dollars and engineer-weeks each rounded). |
+| **Partial** | Half its rating. A partial foundation removes half of its penalty. | Free as is. **Upgrade** to full for half the control's cost from its start month. |
 | **Not in place** | Nothing until funded | Full cost |
 
 **Shelfware isn't a separate state.** It's an in-place control whose foundations are missing, and the card says so.
@@ -78,6 +82,19 @@ Four controls are **foundations**. They don't stop incidents themselves; they ma
 | **OrbitPay** | none | SAST (CodeQL or Semgrep CE on some repos), SCA (Dependabot alerts, nobody assigned), Secrets (GitHub secret scanning; some teams use AWS Secrets Manager, others .env files), MFA (staff only), WAF (CDN free tier), Cloud Posture (basic registry image scanning) | 120 people, mostly engineers, so free tools are everywhere, but no coordination between teams, no tracking, and no definition of what security requires |
 | **MediSecure** | Data Protection (encryption at rest and in transit), Pen Testing (annual, because customers and auditors expect it) | IR (on paper, never exercised), Inventory (HIPAA risk analysis of ePHI systems), Training (annual HIPAA awareness), RBAC (annual user-access review), Detection (audit logs reviewed for the audit, not monitored) | An annual internal audit against its HIPAA policy proves compliance to leadership, so everything the policy names exists on paper. Pen test findings sit unfixed. |
 | **RetailRush** | SAST (bought two years ago, now shelfware), Pen Testing (annual, for PCI) | WAF (log-only), Detection (logs collected, nobody watches), MFA (admins only), Data Protection (processor tokenizes cards; customer PII isn't), Training (annual awareness, not secure coding) | Plenty of spend, little effect. Its partial controls double as latent PCI DSS findings. |
+
+#### Time and capacity
+
+| Company | Start months | Engineer-weeks per phase | Incidents land in months |
+|---|---|---|---|
+| OrbitPay | Now, +3 | 24 (months 1–3), 24 (4–6) | 1, 2, 4, 5, 6 |
+| MediSecure | Now, +3, +6 | 8.5 (1–3), 8.5 (4–6), 17 (7–12) | 2, 4, 7, 9, 11 |
+| RetailRush | Now, +3, +6, +12 | 17.5 (1–3), 17.5 (4–6), 35 (7–12), 35 (13–18) | 2, 6, 10, 13, 17 |
+
+- **Capacity is split across phases** in proportion to their length. A control's setup effort lands in its start phase and its run effort in every month after. Unused engineer-weeks don't carry forward: time not spent is gone.
+- **Dollars stay a single budget,** but a later start pays fewer months of run cost. Starting late is cheaper and protects less, which is the trade-off.
+- **You can't start everything now.** At every company, the best roadmap started entirely in month one is over capacity.
+- **Incidents land in run order,** so the biggest threat hits early, before most controls have ramped. That's harsh but realistic.
 
 #### The incident run
 
@@ -98,38 +115,46 @@ The run and the score can disagree. Winning roadmaps often neutralize only 2–4
 
 #### Difficulty and example roadmaps
 
-Every affordable roadmap at every company was enumerated (`node scripts/calibrate.mjs`; the tests repeat it).
+With start months, exhaustive search is out of reach (OrbitPay alone has 3^18 plans). `node scripts/calibrate.mjs` (about 6 seconds) does three things:
 
-| Company | Timeline · budget · capacity | Staffing | Day one | Best | Best without funding a foundation | Full-budget roadmaps that pass | Winning roadmaps |
-|---|---|---|---|---|---|---|---|
-| OrbitPay (120 people) | 6 months · $90K · 48 eng-weeks | First AppSec hire plus most of a platform engineer on loan | 21% | 75% | 62% (fails) | 5.4% | 1,055 |
-| MediSecure (80 people) | 12 months · $80K · 34 eng-weeks | Half-time security engineer shared with compliance, plus two champions | 26% | 74% | 64% (fails) | 5.6% | 255 |
-| RetailRush (200 people) | 18 months · $250K · 105 eng-weeks | Two-person AppSec team, about 70% free for roadmap work | 25% | 77% | 63% (fails) | 3.8% | 128 |
+1. Enumerates every set of controls that fits at its cheapest start.
+2. Drops sets whose instant score (everything at full strength from day one) can't reach the bar. Ramping only lowers a score, so this is safe.
+3. Schedules the rest with a greedy pass and hill-climbing.
 
-"Full-budget" means nothing else fits. Engineer-weeks, not dollars, are usually the binding constraint: winning roadmaps often leave dollars unspent.
+"Best" and "winning sets" are therefore lower bounds. **The foundations result is proved, not estimated:** every start month for every no-foundation set that could get within half a point of the bar is checked. The tests repeat all of this.
 
-Example roadmaps (asserted in the tests; "upgrade" means a partial control brought to full):
+| Company | Timeline · budget · capacity | Staffing | Day one | Best found | Best possible without a foundation (proved) | Winning sets found |
+|---|---|---|---|---|---|---|
+| OrbitPay (120 people) | 6 months · $90K · 48 eng-weeks | First AppSec hire plus most of a platform engineer on loan | 21% | 68% | 56% (fails) | 830 |
+| MediSecure (80 people) | 12 months · $80K · 34 eng-weeks | Half-time security engineer shared with compliance, plus two champions | 26% | 70% | 61% (fails) | 658 |
+| RetailRush (200 people) | 18 months · $250K · 105 eng-weeks | Two-person AppSec team, about 70% free for roadmap work | 25% | 72% | 61% (fails, by 0.6 points) | 589 |
 
-| Company | Roadmap | Readiness | Cost |
+Example roadmaps (asserted in the tests; "upgrade" means a partial control brought to full; the month is when each starts):
+
+| Company | Roadmap | Readiness (during / handover) | Cost |
 |---|---|---|---|
-| OrbitPay | Inventory, Vulnerability Management, upgrade MFA, upgrade SCA, upgrade Secrets, upgrade Cloud Posture, DAST, Pen Testing, Incident Response (best) | 75% | $89K, 48 EW |
-| OrbitPay | Inventory, Secure Defaults, upgrade MFA, Detection, Incident Response (fewest controls that pass) | 66% | $34K, 44 EW |
-| MediSecure | upgrade Inventory, Vulnerability Management, SCA, upgrade RBAC, Cloud Posture, upgrade Detection, upgrade IR (best) | 74% | $61K, 34 EW |
-| MediSecure | Vulnerability Management, SCA, Cloud Posture, upgrade Detection, upgrade IR (lean) | 69% | $57K, 25 EW |
-| RetailRush | Inventory, Vulnerability Management, SCA, upgrade MFA, upgrade WAF, upgrade Detection, Incident Response (best) | 77% | $188K, 104 EW |
-| RetailRush | Inventory, Vulnerability Management, SCA, upgrade WAF, Incident Response | 69% | $129K, 80 EW |
+| OrbitPay | **Now:** Inventory, Vulnerability Management, upgrade MFA, upgrade Secrets, upgrade WAF. **+3:** Pen Testing, DAST, IR, upgrade Cloud Posture, upgrade SCA, upgrade SAST (best found) | 68% (59 / 78) | $78K, 47 EW |
+| OrbitPay | **Now:** Inventory, upgrade MFA, Detection, IR. **+3:** Vulnerability Management, Pen Testing, DAST (lean) | 64% (56 / 72) | $74K, 43 EW |
+| MediSecure | **Now:** Vulnerability Management, SCA, upgrade IR. **+3:** Cloud Posture, upgrade Inventory. **+6:** Secrets, WAF (best found) | 70% (65 / 75) | $55K, 33 EW |
+| MediSecure | **Now:** Vulnerability Management, SCA, upgrade IR. **+3:** Cloud Posture (lean) | 62% (59 / 64) | $40K, 20 EW |
+| RetailRush | **Now:** SCA, Vulnerability Management. **+3:** Inventory. **+6:** IR, upgrade WAF, upgrade Detection. **+12:** upgrade MFA, upgrade Training (best found) | 72% (65 / 78) | $159K, 97 EW |
+| RetailRush | **Now:** upgrade WAF, SCA, IR. **+3:** Vulnerability Management. **+6:** Inventory (lean) | 66% (63 / 69) | $117K, 73 EW |
+
+**Sequencing, the same nine controls at OrbitPay:** foundations first (Inventory, Vulnerability Management, MFA, Pen Testing and Cloud Posture now; the rest at +3) scores **66%**. Tools first (MFA, SCA, Secrets, DAST, Pen Testing and Cloud Posture now; IR, Inventory and Vulnerability Management at +3) scores **63%**. Order usually costs 1–7 points rather than deciding pass or fail. It matters most at OrbitPay, whose six months leave no time to catch up, and least at RetailRush.
 
 What the winning roadmaps have in common:
 
-- **OrbitPay:** every winner funds Inventory, and 78% fund Vulnerability Management. Coordinating the free tools it already has is the core move. 92% upgrade MFA. Upgrading all six free tools *without* foundations reaches only 40%; adding Inventory and Vulnerability Management lifts that to 64%, still short.
-- **MediSecure:** every winner funds Vulnerability Management and SCA, which also makes the existing pen test pay off (its findings start getting fixed). 70% upgrade the paper IR plan.
-- **RetailRush:** 79% fund Vulnerability Management, which unlocks the shelfware SAST and the pen test.
-- **Weak cards:** Secure Defaults (2–4% of winners), Champions (2–15%), and RBAC at RetailRush (4%). Threat Modeling appears in 13–28%. These are expected to improve when time-to-value is modeled, because their payoff is long-term.
+- **OrbitPay:** every winner funds Inventory, 98% upgrade MFA, and 84% fund Vulnerability Management. Coordinating the free tools it already has is the core move.
+- **MediSecure:** every winner funds SCA, and 98% fund Vulnerability Management, which also makes the existing pen test pay off. 70% upgrade the paper IR plan.
+- **RetailRush:** SCA (93%), Vulnerability Management (77%), and IR (76%). The best plans start SCA and Vulnerability Management first and leave the upgrades for later.
+- **Weak cards:** Secure Defaults (4–7% of winners, after its setup effort was cut from 10 to 6 engineer-weeks per 100 people), RBAC (3–4%), Secrets at RetailRush (4%), and Data Protection at OrbitPay (5%). Threat Modeling appears in 19–24%.
 
 Common misses worth coaching:
 
 - **"Compliant on paper isn't secure."** MediSecure's controls exist because the HIPAA audit names them. RetailRush's log-only WAF, unwatched logs, admin-only MFA, and awareness-only training are also likely PCI DSS findings.
 - **"Fix what you have before you buy more."** A partial control is often the cheapest effect available, and a missing foundation can halve every tool that depends on it.
+- **"You can't stand it all up in quarter one."** Start the foundations and the quick, high-value fixes first. A tool started before its foundations spends months delivering a fraction of its value.
+- **"Long-ramp controls are bets on the handover."** Threat Modeling and Secure Defaults barely move this year's loss, but they lower the risk you leave behind.
 - A secrets manager doesn't stop credential stuffing (MFA does, and WAF rate limiting helps), and training no longer stops anything on its own: it makes the tools work.
 
 #### Risk registers
@@ -199,15 +224,15 @@ The malicious-package likelihoods (0.08 / 0.08 / 0.12) and rationales are newer 
 
 #### The catalog
 
-Costs are per 100 people (about 50 engineers), scaled by headcount, as one-time setup plus monthly run over the timeline. Setup dollars are mostly $0 because SaaS tools rarely charge setup fees; setup is engineering time. Exceptions: MFA $5K (hardware keys), Threat Modeling $5K (coaching), IR $5K (tabletop facilitation), RBAC $2K (external review), Pen Testing $25K (first engagement).
+Costs are per 100 people (about 50 engineers), scaled by headcount, as one-time setup plus monthly run over the timeline. The table shows each control started now; a later start pays fewer months of run cost. Setup dollars are mostly $0 because SaaS tools rarely charge setup fees; setup is engineering time. Exceptions: MFA $5K (hardware keys), Threat Modeling $5K (coaching), IR $5K (tabletop facilitation), RBAC $2K (external review), Pen Testing $25K (first engagement).
 
 | Control | SAMM function | Rated against | Needs | OrbitPay | MediSecure | RetailRush |
 |---|---|---|---|---|---|---|
 | Secure Coding Training | Governance | Foundation | — | $7K / 5 EW | partial; upgrade $5K / 3 EW | partial; upgrade $18K / 10 EW |
 | Security Champions Program | Governance | Foundation | — | $6K / 8 EW | $8K / 8 EW | $29K / 28 EW |
 | Inventory, Risk Classification & Coverage Metrics | Governance | Foundation | — | $4K / 8 EW | partial; upgrade $3K / 4 EW | $18K / 21 EW |
-| Threat Modeling & Security Requirements | Design | Logic flaw 70%, access control 40%, privilege escalation 30% | Champions | $9K / 7 EW | $10K / 7 EW | $23K / 24 EW |
-| Secure Defaults & Paved Roads | Design | Injection 75%, XSS 75%, access control 50%, misconfiguration 30%, secret leak 30% | Champions, Training | $0K / 16 EW | $0K / 13 EW | $0K / 38 EW |
+| Threat Modeling & Security Requirements | Design | Logic flaw 70%, access control 40% and privilege escalation 30% (new code only) | Champions | $9K / 7 EW | $10K / 7 EW | $23K / 24 EW |
+| Secure Defaults & Paved Roads | Design | Injection 75%, XSS 75%, access control 50%, misconfiguration 30%, secret leak 30% (new code only) | Champions, Training | $0K / 11 EW | $0K / 10 EW | $0K / 30 EW |
 | MFA & Auth Hardening | Design | Credential stuffing 85%, account takeover 80% | Inventory | partial; upgrade $5K / 4 EW | $11K / 6 EW | partial; upgrade $14K / 9 EW |
 | SCA & Supply Chain Integrity | Implementation | Dependency CVE 80%, malicious package 60% | Vuln Mgmt | partial; upgrade $5K / 3 EW | $12K / 4 EW | $45K / 15 EW |
 | Secrets Management & Push Protection | Implementation | Secret leak 85% | Inventory | partial; upgrade $7K / 6 EW | $17K / 9 EW | $65K / 27 EW |
@@ -301,7 +326,7 @@ The results screen compares this year's loss with the program budget. That's the
 
 Correct checkpoint answer: **Pick the higher-impact initiative and defer the other.** A half-executed initiative is worse than a deferred one.
 
-Locking the map also requires one initiative with every field filled in. **Start from my simulator roadmap** pre-fills the initiative, goal, and investment (dollars and engineer-weeks for that company's timeline) from the first three controls in the Mission 02 roadmap, and the attendee adds the metric, timeline, impact, and effort. An upgraded partial control imports as "Upgrade existing …" at the upgrade's cost, and foundations import as their own rows. The stack rank orders by impact (high first), then effort (low first):
+Locking the map also requires one initiative with every field filled in. **Start from my simulator roadmap** pre-fills the initiative, goal, and investment (dollars and engineer-weeks for that company's timeline) from the first three controls in the Mission 02 roadmap, and the attendee adds the metric, timeline, impact, and effort. An upgraded partial control imports as "Upgrade existing …" at the upgrade's cost, and foundations import as their own rows. Each row's timeline comes from the control's start month: now → 30 days, +3 months → 90, +6 → 180, +12 → 360. The stack rank orders by impact (high first), then effort (low first):
 
 - **Quick win**: impact higher than effort. Start here to build credibility.
 - **Planned investment**: impact equals effort, moderate or high.

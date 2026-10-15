@@ -481,7 +481,7 @@ footer { min-height: 56px; display: flex; justify-content: space-between; align-
 .register-bar i { position: absolute; left: 0; top: 0; height: 100%; width: 0; transition: width .4s ease-out; }
 .run-mode { margin: 0 0 .6rem; padding: 0; border: 0; min-width: 0; }
 .run-mode legend { margin-bottom: .4rem; color: var(--cyan); font: .64rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
-.segmented { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); }
+.segmented { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); }
 .segmented label { position: relative; cursor: pointer; }
 .segmented input { position: absolute; opacity: 0; }
 .segmented span { display: block; padding: .6rem .5rem; color: var(--muted); font: .64rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; text-align: center; }
@@ -494,6 +494,26 @@ footer { min-height: 56px; display: flex; justify-content: space-between; align-
 .gap-list small { color: #c7d2d0; font-size: .74rem; }
 .gap-list b, .lesson b { color: var(--amber); font-family: var(--font-mono); font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; }
 .sim-score + .stakes { text-align: center; }
+
+/* Mission 02 time to value: start phases, ramp lines, and the month timeline */
+.initiative-card { display: flex; flex-direction: column; min-width: 0; }
+.initiative-card > .initiative { flex: 1; }
+.initiative-card.funded .patch-content { border-bottom-color: transparent; }
+.initiative .ramp { display: block; margin-bottom: .45rem; color: var(--muted); font: .62rem var(--font-mono); text-transform: uppercase; letter-spacing: .05em; }
+.start-phase { margin: 0; padding: .35rem .6rem .55rem; border: 1px solid var(--cyan); border-top: 0; background: rgba(115,229,241,.08); min-width: 0; }
+.start-phase legend { float: left; width: 100%; margin: 0 0 .35rem; padding: .3rem 0 0; color: var(--cyan); font: .58rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
+.start-phase .segmented { clear: both; }
+.start-phase .segmented { overflow: hidden; background: rgba(7,19,31,.6); }
+.start-phase .segmented span { padding: .45rem .1rem; white-space: nowrap; }
+.segmented input:disabled + span { opacity: .35; cursor: not-allowed; }
+.timeline { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 1rem; padding: 0; list-style: none; }
+.timeline li { display: grid; place-items: center; height: 1.6rem; background: var(--panel-bright); color: var(--muted); font: .55rem var(--font-mono); }
+.timeline li.phase-start { box-shadow: inset 2px 0 0 var(--amber); }
+.timeline li.landing { outline: 1px solid var(--amber); outline-offset: -1px; color: var(--paper); }
+.timeline li.active { background: var(--amber); color: var(--ink); }
+.timeline li.neutralized { background: var(--cyan); color: var(--ink); }
+.timeline li.contained { background: rgba(249,196,1,.45); color: var(--ink); }
+.timeline li.breached { background: var(--coral); color: var(--ink); }
 
 #print-root { display: none; }
 

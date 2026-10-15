@@ -7,7 +7,7 @@ This is the Commander track of the SAINTCON AppSec Academy, alongside the [Cadet
 ## Missions
 
 1. **The Command Protocols** (program components). Initiate the commands in four protocols (Define, Evaluate, Integrate, Measure) and pass a checkpoint for each one.
-2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), assess the controls it already runs, and fund or upgrade controls within its budget and engineer-weeks until expected loss across its 14-threat risk register falls by at least 66%. Then live through one possible year of five incidents.
+2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), assess the controls it already runs, and fund or upgrade controls within its budget and per-phase engineer-weeks, choosing when each one starts, until expected loss across its 14-threat risk register falls by at least 62%. Controls ramp up over months, so sequencing matters. Then live through one possible year of five incidents, each landing in a set month.
 3. **The Commander's Map** (roadmap planning). Fill in up to three initiatives (what, why, metric, timeline, investment, impact, effort), watch them stack-rank by impact vs. effort, pass the final checkpoint, and print the map.
 
 Each mission follows the academy loop: gather evidence, make a decision, verify it. Wrong answers explain why they fail. Completing all three awards the **Mission Commander** qualification and the Hackers Challenge token.
@@ -38,7 +38,7 @@ ES modules mean opening `index.html` directly with a `file:` URL is not supporte
 npm test
 ```
 
-The tests cover checkpoint integrity, the risk registers, simulator scoring, foundations, starting posture, the cost model, resource limits, ranking, and input sanitizing. They also brute-force every affordable roadmap at every company (a fraction of a second) to prove each one is winnable but hard: the best roadmap clears the bar comfortably, no roadmap wins without funding a foundation, a small share of full-budget roadmaps pass, and every control appears in some winning roadmap.
+The tests cover checkpoint integrity, the risk registers, simulator scoring, foundations, starting posture, the cost model, resource limits, ranking, and input sanitizing. They also search every company's roadmaps, start months included (a few seconds), to show each one is winnable but hard: the best roadmap clears the bar comfortably, many different roadmaps win, and every control appears in some winning roadmap. That no roadmap wins without funding a foundation is proved exhaustively over every start month.
 
 To see each company's difficulty and best roadmaps while tuning numbers:
 
@@ -66,6 +66,7 @@ The protocol copy, simulator scenarios, initiatives, and incidents come from the
   - **14 threats and a risk register per company.** Readiness is the share of inherent expected loss (likelihood × impact across every threat) that the company's controls remove. Passing requires 66%.
   - **A starting posture per company:** some controls are already in place or partial (including shelfware), and partial ones can be upgraded for half price.
   - **The five incidents are "one possible year"**, picked from the register by the biggest threats or by the biggest gaps today. The original drew 5 random incidents out of 8.
+  - **Time to value:** each control starts now or after 3, 6, or 12 months and ramps up to full strength, capacity is split by phase, and the score weighs the loss during the timeline and the risk handed over at the end equally.
 - Controls are partially effective and layer (SAST 70% + Secure Defaults 75% = 93% of injection); detection and incident response limit loss instead of preventing it. The original treated any matching control as 100% effective and scored fixed points per incident.
 - Timelines are 6, 12, and 18 months instead of 6 to 10 weeks, and capacity is measured in engineer-weeks instead of engineer-hours. Each initiative costs a one-time setup plus a monthly run cost over the company's timeline, scaled to its headcount (see the comment at the top of `js/simulation.js`). Each company remains a separate, standalone scenario, with budget and capacity sized from a staffing story shown on its card.
 - Incident financial impact is scaled to each company (size × sector exposure) instead of a flat $15K to $40K, and readiness is computed from it.

@@ -1,6 +1,6 @@
 // Mission 03 content. Field prompts and examples are carried over from section
 // 05 BUILD of the Base44 "Build an AppSec Roadmap" page.
-import { findInitiative, optionCost, postureOf } from "./simulation.js";
+import { findInitiative, optionCost, postureOf, startOf, toRoadmap } from "./simulation.js";
 
 export const buildIntro = "Stack-rank by impact vs. effort before assigning timelines — start with high-impact, lower-effort work to build credibility. If two initiatives compete for the same resource, pick one; a half-executed initiative is worse than a deferred one.";
 
@@ -93,18 +93,24 @@ export function rankRows(rows) {
     .map(({ row, index }) => ({ ...row, slot: index + 1, priority: priorityLabel(row) }));
 }
 
-// Upgrading a partial control imports as "Upgrade existing …", at the upgrade's cost.
-export function rowsFromSimulation(scenario, activatedIds) {
-  return activatedIds.slice(0, maxRows).map((id) => {
+// Upgrading a partial control imports as "Upgrade existing …", at the upgrade's cost. The row's
+// timeline comes from the control's start: now → 30 days, +3 months → 90, +6 → 180, +12 → 360.
+const timelineForStart = { 0: "30", 3: "90", 6: "180", 12: "360" };
+
+export function rowsFromSimulation(scenario, roadmapInput) {
+  const roadmap = toRoadmap(roadmapInput);
+  return roadmap.activated.slice(0, maxRows).map((id) => {
     const initiative = findInitiative(id);
     if (!initiative || !scenario) return emptyRow();
-    const cost = optionCost(scenario, id);
+    const start = startOf(roadmap, id);
+    const cost = optionCost(scenario, id, start);
     const upgrade = postureOf(scenario, id) === "partial";
     return {
       ...emptyRow(),
       initiative: `${upgrade ? "Upgrade existing " : ""}${initiative.name}`,
       goal: initiative.description,
-      investment: `$${cost.budget}K and ${cost.weeks} engineer-weeks over ${scenario.months} months`
+      investment: `$${cost.budget}K and ${Math.round(cost.weeks)} engineer-weeks, starting ${start === 0 ? "now" : `after ${start} months`}`,
+      timeline: timelineForStart[start] ?? ""
     };
   });
 }

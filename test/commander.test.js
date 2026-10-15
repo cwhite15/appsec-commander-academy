@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkAnswer, descriptionBlocks, protocols, totalCommands } from "../js/protocols.js";
-import { assessIncident, canActivate, controlStatus, costOf, deliveredFor, expectedLoss, findScenario, foundationFactor, formatImpact, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, levelsFor, mitigationFor, optionCost, passingReadiness, penalties, registerFor, runSimulation, sanitizeSelection, scenarios, scoreRoadmap, strengthenOptions, tiers, totals, validRunMode } from "../js/simulation.js";
-import { difficultyOf } from "../scripts/roadmaps.mjs";
+import { assessIncident, canPlace, controlStatus, costOf, deliveredFor, earliestStart, expectedLoss, findScenario, foundationFactor, formatImpact, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsFor, mitigationFor, optionCost, passingReadiness, penalties, phasesFor, registerFor, runSimulation, sanitizeRoadmap, scenarios, scoreRoadmap, scoreWeights, startsFor, strengthenOptions, tiers, totals, validRunMode, withinResources } from "../js/simulation.js";
+import { difficultyOf, foundationIds, proveBestWithoutFoundations, score, searchContext } from "../scripts/roadmaps.mjs";
 import { checkMapAnswer, checkpoint, isRowComplete, maxFieldLength, rankRows, readyToLock, rowsFromSimulation, sanitizeRows } from "../js/roadmap.js";
 
 const orbitpay = findScenario("orbitpay");
@@ -10,16 +10,26 @@ const medisecure = findScenario("medisecure");
 const retailrush = findScenario("retailrush");
 const near = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label ?? ""} ${actual} != ${expected}`);
 // A company with nothing in place, to test the mechanics in isolation.
-const blank = { id: "blank", headcount: 100, months: 12, budget: 1000, engineerWeeks: 1000, impactMultiplier: 1, posture: {}, riskRegister: {} };
+const blank = { id: "blank", headcount: 100, months: 12, budget: 1000, engineerWeeks: 1000, impactMultiplier: 1, newCodeShare: 1, posture: {}, riskRegister: {} };
+const plan = (starts) => ({ activated: Object.keys(starts), starts });
 
-// Every affordable roadmap at every company, enumerated once and shared by the difficulty tests.
+// The search behind the difficulty tests, run once (a few seconds). See scripts/roadmaps.mjs.
 const difficulty = Object.fromEntries(scenarios.map((scenario) => [scenario.id, difficultyOf(scenario)]));
 
-// The facilitator guide's example roadmaps and their readiness.
+// The facilitator guide's example roadmaps (the best found, and the leanest winner) and their readiness.
 const examples = {
-  orbitpay: [[["inventory", "vuln_mgmt", "mfa", "sca", "secrets", "container", "dast", "pentest", "ir"], 75], [["inventory", "secure_defaults", "mfa", "detection", "ir"], 66]],
-  medisecure: [[["inventory", "vuln_mgmt", "sca", "rbac", "container", "detection", "ir"], 74], [["vuln_mgmt", "sca", "container", "detection", "ir"], 69]],
-  retailrush: [[["inventory", "vuln_mgmt", "sca", "mfa", "waf", "detection", "ir"], 77], [["inventory", "vuln_mgmt", "sca", "waf", "ir"], 69]]
+  orbitpay: [
+    [plan({ inventory: 0, vuln_mgmt: 0, mfa: 0, secrets: 0, waf: 0, pentest: 3, dast: 3, ir: 3, container: 3, sca: 3, sast: 3 }), 68],
+    [plan({ inventory: 0, mfa: 0, detection: 0, ir: 0, vuln_mgmt: 3, pentest: 3, dast: 3 }), 64]
+  ],
+  medisecure: [
+    [plan({ vuln_mgmt: 0, sca: 0, ir: 0, container: 3, inventory: 3, secrets: 6, waf: 6 }), 70],
+    [plan({ vuln_mgmt: 0, sca: 0, ir: 0, container: 3 }), 62]
+  ],
+  retailrush: [
+    [plan({ sca: 0, vuln_mgmt: 0, inventory: 3, ir: 6, waf: 6, detection: 6, mfa: 12, training: 12 }), 72],
+    [plan({ waf: 0, sca: 0, ir: 0, vuln_mgmt: 3, inventory: 6 }), 66]
+  ]
 };
 
 test("protocol checkpoints are well formed and explain every wrong answer", () => {
@@ -56,11 +66,13 @@ test("the catalog has 18 controls, 4 foundations, and every control sits in a SA
   for (const initiative of initiatives) {
     assert.ok(groups.some((group) => group.id === initiative.group), initiative.id);
     assert.ok(initiative.short && initiative.description.length <= maxFieldLength, initiative.id);
+    assert.ok(initiative.rampMonths >= 1 && initiative.rampMonths <= 6, `${initiative.id} ramp`);
     for (const need of initiative.needs) assert.ok(need in penalties, `${initiative.id} needs ${need}`);
     for (const key of ["setupK", "monthlyK", "setupWeeks", "monthlyWeeks"]) assert.ok(initiative[key] >= 0, `${initiative.id}.${key}`);
     if (initiative.foundation) assert.deepEqual([initiative.mitigates, initiative.needs], [{}, []], `${initiative.id} is a pure foundation`);
   }
   assert.deepEqual(initiatives.find((initiative) => initiative.id === "ir").needs, ["detection"], "IR depends on detection");
+  assert.deepEqual(initiatives.filter((initiative) => initiative.helpsShipped === false).map((initiative) => initiative.id).sort(), ["secure_defaults", "threat_modeling"]);
 });
 
 test("every threat is coverable, and no control is perfect", () => {
@@ -84,7 +96,7 @@ test("every company's register rates every threat, with likelihoods between 0 an
       assert.ok(["in", "partial"].includes(item.state) && item.note.length > 0, `${scenario.id}.${id}`);
     }
     assert.ok(scenario.postureStory.length > 0, scenario.id);
-    assert.equal("incidentIds" in scenario, false);
+    assert.ok(scenario.newCodeShare > 0 && scenario.newCodeShare <= 1, scenario.id);
   }
 });
 
@@ -97,20 +109,23 @@ test("expected loss is likelihood × impact, summed across the register", () => 
   assert.deepEqual(register.map((row) => row.inherent), [...register.map((row) => row.inherent)].sort((a, b) => b - a), "sorted by inherent loss");
   const loss = expectedLoss(register);
   near(loss.inherent, register.reduce((sum, row) => sum + row.likelihood * row.impact, 0));
-  assert.equal(loss.target, loss.current, "no roadmap yet");
+  for (const key of ["during", "handover", "target"]) near(loss[key], loss.current, `with no roadmap, ${key} is today's loss`);
   const totals = scenarios.map((scenario) => expectedLoss(registerFor(scenario))).map((item) => [Math.round(item.inherent), Math.round(item.current)]);
   assert.deepEqual(totals, [[893, 706], [755, 558], [1813, 1368]]);
 });
 
-test("readiness is the share of inherent expected loss removed, and the bar is 66%", () => {
-  assert.equal(passingReadiness, 66);
-  assert.deepEqual(tiers.map((tier) => tier.min), [66, 55, 40, 0]);
-  const [ids] = examples.medisecure[0];
-  const score = scoreRoadmap(medisecure, ids);
-  assert.equal(score.readiness, Math.round(100 * (1 - score.loss.target / score.loss.inherent)));
-  assert.equal(score.passed, true);
-  assert.equal(score.tier.label, "Mission success");
-  assert.ok(score.loss.target < score.loss.current && score.loss.current < score.loss.inherent);
+test("readiness blends the loss during the timeline with the risk handed over, and the bar is 62%", () => {
+  assert.equal(passingReadiness, 62);
+  assert.deepEqual(tiers.map((tier) => tier.min), [62, 50, 35, 0]);
+  assert.deepEqual(scoreWeights, { during: 0.5, handover: 0.5 });
+  const [roadmap] = examples.medisecure[0];
+  const result = scoreRoadmap(medisecure, roadmap);
+  near(result.loss.target, (result.loss.during + result.loss.handover) / 2);
+  assert.equal(result.readiness, Math.round(100 * (1 - result.loss.target / result.loss.inherent)));
+  assert.ok(result.loss.handover < result.loss.during, "controls are stronger at handover than on average");
+  assert.ok(result.loss.during < result.loss.current && result.loss.current < result.loss.inherent);
+  assert.equal(result.passed, true);
+  assert.equal(result.tier.label, "Mission success");
 });
 
 test("the starting posture counts toward readiness, and day one is far below the bar", () => {
@@ -146,10 +161,10 @@ test("each run is the five largest risks: inherent by default, or current, never
 
 test("the run mode changes which incidents play, never the score", () => {
   for (const [id, cases] of Object.entries(examples)) {
-    for (const [ids] of [...cases, [[]]]) {
+    for (const [roadmap] of [...cases, [plan({})]]) {
       const scenario = findScenario(id);
-      const inherent = runSimulation(scenario, ids, "inherent");
-      const current = runSimulation(scenario, ids, "current");
+      const inherent = runSimulation(scenario, roadmap, "inherent");
+      const current = runSimulation(scenario, roadmap, "current");
       assert.deepEqual([inherent.readiness, inherent.passed, inherent.tier], [current.readiness, current.passed, current.tier], id);
       assert.equal(inherent.results.length, 5);
     }
@@ -166,13 +181,21 @@ test("missing foundations cut what a control delivers, and partial foundations c
   near(delivered(["sast"]), 0.7 * 0.5 * 0.75 * 0.85, "none");
   near(deliveredFor(sast, "code_injection", { sast: 1, vuln_mgmt: 0.5, champions: 1, training: 1 }), 0.525, "partial vuln mgmt halves its penalty");
   near(deliveredFor(sast, "code_injection", { sast: 0.5, vuln_mgmt: 1, champions: 1, training: 1 }), 0.35, "a partial control runs at half strength");
-  // IR depends on detection, the one chain. Foundations don't boost each other.
   const ir = initiatives.find((initiative) => initiative.id === "ir");
   near(deliveredFor(ir, "breach_response", { ir: 1 }), 0.3);
   near(deliveredFor(ir, "breach_response", { ir: 1, detection: 0.5 }), 0.45);
   near(deliveredFor(ir, "breach_response", { ir: 1, detection: 1 }), 0.6);
   near(deliveredFor(ir, "ddos", { ir: 1, detection: 1 }), 0.15, "containment on every other incident");
   for (const foundation of initiatives.filter((initiative) => initiative.foundation)) assert.equal(foundationFactor(foundation, {}), 1);
+});
+
+test("threat modeling and secure defaults protect only new code, except against logic flaws", () => {
+  const defaults = initiatives.find((initiative) => initiative.id === "secure_defaults");
+  const modeling = initiatives.find((initiative) => initiative.id === "threat_modeling");
+  const levels = { secure_defaults: 1, threat_modeling: 1, champions: 1, training: 1 };
+  near(deliveredFor(defaults, "code_injection", levels, retailrush), 0.75 * 0.7);
+  near(deliveredFor(modeling, "design_flaw", levels, orbitpay), 0.7, "logic flaws are new features by definition");
+  near(deliveredFor(modeling, "authz_flaw", levels, medisecure), 0.4 * 0.5);
 });
 
 test("layered controls combine without exceeding 100%", () => {
@@ -187,89 +210,168 @@ test("shelfware: a control in place still delivers a fraction without its founda
   assert.equal(sast.posture, "in");
   near(sast.delivered, 0.7 * 0.5 * 0.75 * 0.925);
   assert.deepEqual(sast.missing.map((item) => [item.initiative.id, item.penalty]), [["vuln_mgmt", 0.5], ["champions", 0.25], ["training", 0.075]]);
-  near(controlStatus(retailrush, ["vuln_mgmt"], "sast").delivered, sast.delivered * 2);
+  near(controlStatus(retailrush, plan({ vuln_mgmt: 0 }), "sast").delivered, sast.delivered * 2, "once vulnerability management has ramped up");
   const pentest = controlStatus(medisecure, [], "pentest");
-  near(controlStatus(medisecure, ["vuln_mgmt"], "pentest").delivered, pentest.delivered * 2, "fixing findings makes the existing pen test pay off");
+  near(controlStatus(medisecure, plan({ vuln_mgmt: 0 }), "pentest").delivered, pentest.delivered * 2, "fixing findings makes the existing pen test pay off");
   const coaching = strengthenOptions(retailrush, [], "code_injection");
   assert.equal(coaching.foundations[0].initiative.id, "vuln_mgmt");
   assert.deepEqual(coaching.foundations[0].hampers.map((item) => item.id), ["sast", "pentest"]);
 });
 
-test("controls in place are free, partial ones run at half strength, and upgrades cost half", () => {
+test("controls ramp up from their start month, and upgrades ramp from 50% over half the time", () => {
+  const roadmap = plan({ sast: 0, secrets: 3, mfa: 0 });
+  // RetailRush: SAST is in place, secrets are new (4-month ramp), MFA is partial (3-month ramp, so 1.5 to upgrade).
+  assert.equal(levelAt(retailrush, roadmap, "sast", 0), 1);
+  assert.equal(levelAt(retailrush, roadmap, "secrets", 2), 0, "not started yet");
+  near(levelAt(retailrush, roadmap, "secrets", 3), 0.5 / 4);
+  near(levelAt(retailrush, roadmap, "secrets", 6), 3.5 / 4);
+  assert.equal(levelAt(retailrush, roadmap, "secrets", 7), 1);
+  near(levelAt(retailrush, roadmap, "mfa", 0), 0.5 + 0.5 * (0.5 / 1.5));
+  assert.equal(levelAt(retailrush, roadmap, "mfa", 1), 1);
+  assert.equal(levelAt(retailrush, plan({}), "mfa", 10), 0.5, "a partial control left alone stays at half strength");
+  const status = controlStatus(retailrush, roadmap, "secrets");
+  assert.deepEqual([status.start, status.fullBy, status.level], [3, 7, 1]);
+});
+
+test("each company's timeline offers the start months that fit, with capacity split by phase", () => {
+  assert.deepEqual(scenarios.map(startsFor), [[0, 3], [0, 3, 6], [0, 3, 6, 12]]);
+  assert.deepEqual(phasesFor(medisecure), [{ start: 0, end: 3, capacity: 8.5 }, { start: 3, end: 6, capacity: 8.5 }, { start: 6, end: 12, capacity: 17 }]);
+  for (const scenario of scenarios) near(phasesFor(scenario).reduce((sum, phase) => sum + phase.capacity, 0), scenario.engineerWeeks, scenario.id);
+  assert.deepEqual(scenarios.map((scenario) => [0, 1, 2, 3, 4].map((index) => landingMonth(scenario, index))), [[0, 1, 3, 4, 5], [1, 3, 6, 8, 10], [1, 5, 9, 12, 16]]);
+});
+
+test("costs: in place is free, partial upgrades cost half, and a later start pays fewer months", () => {
   assert.deepEqual(costOf(initiatives.find((initiative) => initiative.id === "sast"), orbitpay), { budget: 11, weeks: 6 });
-  assert.deepEqual(optionCost(orbitpay, "sast"), { budget: 6, weeks: 3 }, "dollars and weeks round separately");
-  assert.deepEqual(costOf(initiatives.find((initiative) => initiative.id === "mfa"), retailrush), { budget: 27, weeks: 17 });
-  assert.deepEqual(optionCost(retailrush, "mfa"), { budget: 14, weeks: 9 });
-  assert.deepEqual(optionCost(medisecure, "pentest"), { budget: 0, weeks: 0 });
-  assert.equal(canActivate(medisecure, [], "pentest"), false, "in-place controls can't be bought again");
+  const upgrade = optionCost(orbitpay, "sast", 0);
+  assert.equal(upgrade.budget, 6, "half of $11K, rounded");
+  near(upgrade.phaseWeeks[0], 0.5 * 1.2 * (3 + 0.4 * 3), "setup plus three months of run effort");
+  near(upgrade.phaseWeeks[1], 0.5 * 1.2 * 0.4 * 3);
+  near(upgrade.weeks, upgrade.phaseWeeks[0] + upgrade.phaseWeeks[1]);
+  const later = optionCost(orbitpay, "sast", 3);
+  assert.ok(later.budget < upgrade.budget && later.weeks < upgrade.weeks);
+  assert.equal(later.phaseWeeks[0], 0, "nothing is spent before it starts");
+  assert.equal(optionCost(retailrush, "mfa").budget, 14);
+  assert.deepEqual(optionCost(medisecure, "pentest"), { budget: 0, weeks: 0, phaseWeeks: [0, 0, 0] });
+  assert.equal(canPlace(medisecure, [], "pentest", 0), false, "in-place controls can't be bought again");
+  assert.equal(canPlace(orbitpay, [], "sast", 6), false, "not a start month inside a 6-month timeline");
   assert.deepEqual(levelsFor(medisecure, []), { data_protection: 1, pentest: 1, ir: 0.5, inventory: 0.5, training: 0.5, rbac: 0.5, detection: 0.5 });
-  assert.equal(levelsFor(medisecure, ["ir"]).ir, 1);
-  assert.deepEqual(totals(orbitpay, ["sast", "inventory"]), { budget: 6 + 4, weeks: 3 + 8 });
+  assert.equal(totals(orbitpay, plan({ sast: 0, inventory: 0 })).budget, 6 + 4);
 });
 
-test("resource limits are enforced, including on restored selections", () => {
-  assert.equal(canActivate(medisecure, ["sca"], "sca"), false);
-  assert.equal(canActivate(medisecure, [], "bogus"), false);
-  const restored = sanitizeSelection(medisecure, ["sca", "bogus", "sca", "pentest", "vuln_mgmt", "container", "secrets", "dast", "rbac", "detection", "ir", "mfa"]);
-  assert.deepEqual(restored, ["sca", "vuln_mgmt", "container", "secrets", "dast"]);
-  const spent = totals(medisecure, restored);
-  assert.ok(spent.budget <= medisecure.budget && spent.weeks <= medisecure.engineerWeeks);
-  assert.deepEqual(sanitizeSelection(medisecure, "not an array"), []);
-  assert.deepEqual(sanitizeSelection(undefined, ["sca"]), []);
+test("capacity is enforced per phase, so you can't start everything at once", () => {
+  const [best] = examples.orbitpay[0];
+  assert.equal(withinResources(orbitpay, best), true);
+  assert.equal(withinResources(orbitpay, { activated: best.activated, starts: {} }), false, "the best plan, all started now, is over capacity");
+  for (const scenario of scenarios) {
+    const ids = difficulty[scenario.id].best.ids;
+    assert.equal(withinResources(scenario, { activated: ids, starts: {} }), false, `${scenario.id}: everything at month 0 should not fit`);
+  }
+  const full = plan({ inventory: 0, vuln_mgmt: 0, mfa: 0, secrets: 0, waf: 0 });
+  assert.equal(earliestStart(orbitpay, full, "dast"), 3, "the first quarter is full, so DAST fits only later");
+  assert.equal(canPlace(orbitpay, full, "dast", 0), false);
 });
 
-test("an incident's outcome reflects the posture, the roadmap, and the foundations behind them", () => {
+test("restored roadmaps are rebuilt within resources, moving starts that no longer fit", () => {
+  const restored = sanitizeRoadmap(orbitpay, { activated: ["inventory", "bogus", "inventory", "vuln_mgmt", "mfa", "secrets", "waf", "dast", "sast"], starts: { inventory: 0, vuln_mgmt: 7, dast: 0 } });
+  assert.deepEqual(restored.activated, ["inventory", "vuln_mgmt", "mfa", "secrets", "waf", "dast", "sast"]);
+  assert.equal(restored.starts.vuln_mgmt, 0, "an invalid start moves to the earliest that fits");
+  assert.equal(restored.starts.dast, 3, "a start that no longer fits moves later");
+  assert.equal(withinResources(orbitpay, restored), true);
+  assert.deepEqual(sanitizeRoadmap(medisecure, { activated: ["pentest", "sca"] }).activated, ["sca"], "in-place controls are dropped");
+  assert.deepEqual(sanitizeRoadmap(orbitpay, ["mfa", "sca"]), { activated: ["mfa", "sca"], starts: { mfa: 0, sca: 0 } }, "a saved list from before start months still loads");
+  assert.deepEqual(sanitizeRoadmap(orbitpay, "not a roadmap"), { activated: [], starts: {} });
+  assert.deepEqual(sanitizeRoadmap(undefined, ["sca"]), { activated: [], starts: {} });
+});
+
+test("an incident is met by whatever had ramped up by the month it lands", () => {
+  const leak = incidents.find((incident) => incident.id === "secret_leak");
+  const early = assessIncident(leak, retailrush, plan({ secrets: 0, inventory: 0 }), 1);
+  const secrets = early.contributors.find((item) => item.initiative.id === "secrets");
+  near(secrets.level, 1.5 / 4);
+  assert.equal(secrets.ramping, true, "the card reads 'Secrets Management 38% ramped'");
+  const late = assessIncident(leak, retailrush, plan({ secrets: 0, inventory: 0 }), 9);
+  assert.ok(late.mitigation > early.mitigation && late.impact < early.impact);
+  const waiting = assessIncident(leak, retailrush, plan({ secrets: 3 }), 1);
+  assert.deepEqual(waiting.notStarted.map((item) => [item.initiative.id, item.start]), [["secrets", 3]]);
+  assert.equal(waiting.month, 1);
+  const stuffing = incidents.find((incident) => incident.id === "cred_stuffing");
+  const before = assessIncident(stuffing, retailrush, plan({ mfa: 12 }), 5);
+  const mfa = before.contributors.find((item) => item.initiative.id === "mfa");
+  assert.deepEqual([mfa.level, mfa.ramping], [0.5, false], "a partial control waiting for its upgrade is not ramping yet");
+  assert.deepEqual(before.notStarted.map((item) => [item.initiative.id, item.upgrade]), [["mfa", true]]);
   const sqli = incidents.find((incident) => incident.id === "sqli");
-  const before = assessIncident(sqli, retailrush, []);
-  assert.equal(before.potential, 500);
-  assert.equal(before.outcome, "contained");
-  assert.deepEqual(before.contributors.slice(0, 2).map((item) => item.initiative.id), ["sast", "pentest"]);
-  assert.ok(before.contributors[0].effectiveness < before.contributors[0].rated);
-  const after = assessIncident(sqli, retailrush, ["vuln_mgmt", "champions", "training"]);
-  assert.ok(after.mitigation > before.mitigation && after.impact < before.impact);
-  assert.equal(after.impact % 10, 0);
-  assert.equal(assessIncident(sqli, blank, []).outcome, "breached");
+  const shelfware = assessIncident(sqli, retailrush, [], 0);
+  assert.equal(shelfware.potential, 500);
+  assert.equal(shelfware.outcome, "contained");
+  assert.deepEqual(shelfware.contributors.slice(0, 2).map((item) => item.initiative.id), ["sast", "pentest"]);
+  assert.equal(assessIncident(sqli, blank, [], 0).outcome, "breached");
+});
+
+test("sequencing: foundations first beats the same controls with tools first", () => {
+  const ids = { inventory: 0, vuln_mgmt: 0, mfa: 0, pentest: 0, container: 0, secrets: 3, dast: 3, ir: 3, sca: 3 };
+  const toolsFirst = { mfa: 0, sca: 0, secrets: 0, dast: 0, pentest: 0, container: 0, ir: 3, inventory: 3, vuln_mgmt: 3 };
+  assert.equal(withinResources(orbitpay, plan(ids)), true);
+  assert.equal(withinResources(orbitpay, plan(toolsFirst)), true);
+  assert.equal(scoreRoadmap(orbitpay, plan(ids)).readiness, 66);
+  assert.equal(scoreRoadmap(orbitpay, plan(toolsFirst)).readiness, 63);
+  const ramped = scoreRoadmap(retailrush, plan({ vuln_mgmt: 0, sca: 0 }));
+  const delayed = scoreRoadmap(retailrush, plan({ vuln_mgmt: 12, sca: 12 }));
+  assert.ok(ramped.during > delayed.during && ramped.readiness > delayed.readiness, "starting later loses the months in between");
 });
 
 test("scoring follows dollars: dropping a control against a bigger risk costs more", () => {
   const [best] = examples.medisecure[0];
-  const without = (id) => scoreRoadmap(medisecure, best.filter((item) => item !== id)).readiness;
-  assert.ok(without("sca") < without("rbac"), "MediSecure's #1 risk is dependency CVEs");
+  const without = (id) => scoreRoadmap(medisecure, { activated: best.activated.filter((item) => item !== id), starts: best.starts }).readiness;
+  assert.ok(without("sca") < without("waf"), "MediSecure's #1 risk is dependency CVEs");
 });
 
-test("each company is hard but fair across every affordable roadmap", () => {
-  for (const scenario of scenarios) {
-    const { best, bestWithoutFoundations, winners, fullPassShare } = difficulty[scenario.id];
-    assert.ok(best.readiness >= passingReadiness + 8, `${scenario.id} best ${best.readiness}`);
-    assert.ok(bestWithoutFoundations.readiness < passingReadiness, `${scenario.id} wins without foundations at ${bestWithoutFoundations.readiness}`);
-    assert.ok(fullPassShare >= 0.02 && fullPassShare <= 0.1, `${scenario.id} full-budget pass share ${fullPassShare}`);
-    assert.ok(winners.length >= 50, `${scenario.id} has ${winners.length} winners`);
-    assert.equal(runSimulation(scenario, []).passed, false);
-  }
-  assert.deepEqual(scenarios.map((scenario) => difficulty[scenario.id].best.readiness), [75, 74, 77]);
-});
-
-test("every control wins somewhere, and no company can afford everything", () => {
-  for (const initiative of initiatives) {
-    assert.ok(scenarios.some((scenario) => difficulty[scenario.id].winners.some((roadmap) => roadmap.ids.includes(initiative.id))), `${initiative.id} never appears in a winning roadmap`);
-  }
-  for (const scenario of scenarios) {
-    const spent = totals(scenario, difficulty[scenario.id].options.map((option) => option.id));
-    assert.ok(spent.budget > scenario.budget || spent.weeks > scenario.engineerWeeks, scenario.id);
-  }
-});
-
-test("the facilitator guide's example roadmaps are affordable and pass", () => {
+test("the search's fast scorer matches the model", () => {
   for (const [id, cases] of Object.entries(examples)) {
     const scenario = findScenario(id);
-    for (const [ids, readiness] of cases) {
-      assert.deepEqual(sanitizeSelection(scenario, ids), ids, `${id} roadmap exceeds resources`);
-      assert.equal(scoreRoadmap(scenario, ids).readiness, readiness, `${id}: ${ids.join(" + ")}`);
+    const ctx = searchContext(scenario);
+    for (const [roadmap] of cases) {
+      const loss = scoreRoadmap(scenario, roadmap).loss;
+      near(Math.round(score(ctx, new Map(Object.entries(roadmap.starts))) * 1e6), Math.round(100 * (1 - loss.target / loss.inherent) * 1e6), id);
     }
   }
-  const tools = ["sast", "sca", "secrets", "mfa", "waf", "container"];
-  assert.equal(scoreRoadmap(orbitpay, tools).readiness, 40, "upgrading every free tool without foundations");
-  assert.equal(scoreRoadmap(orbitpay, [...tools, "inventory", "vuln_mgmt"]).readiness, 64);
+});
+
+test("no roadmap passes without funding or upgrading a foundation (proved over every schedule)", () => {
+  for (const scenario of scenarios) {
+    const proof = proveBestWithoutFoundations(searchContext(scenario));
+    assert.ok(proof.sets > 0 && proof.schedules > 0, scenario.id);
+    assert.ok(Math.round(proof.score) < passingReadiness, `${scenario.id}: ${proof.score.toFixed(2)}% without a foundation`);
+    assert.ok(![...proof.plan.keys()].some((id) => foundationIds.has(id)));
+  }
+});
+
+test("each company is winnable with room to spare, in many ways", () => {
+  for (const scenario of scenarios) {
+    const { best, winners } = difficulty[scenario.id];
+    assert.ok(best.score >= passingReadiness + 6, `${scenario.id} best ${best.score.toFixed(1)}`);
+    assert.ok(winners.length >= 50, `${scenario.id} has ${winners.length} winning sets`);
+    assert.equal(runSimulation(scenario, []).passed, false);
+  }
+  for (const initiative of initiatives) {
+    assert.ok(scenarios.some((scenario) => difficulty[scenario.id].winners.some((item) => item.ids.includes(initiative.id))), `${initiative.id} never appears in a winning roadmap`);
+  }
+  for (const scenario of scenarios) {
+    const latest = startsFor(scenario).at(-1);
+    const everything = difficulty[scenario.id].ctx.options;
+    assert.equal(withinResources(scenario, { activated: everything, starts: Object.fromEntries(everything.map((id) => [id, latest])) }), false, `${scenario.id} can afford everything`);
+  }
+});
+
+test("the facilitator guide's example roadmaps fit and pass", () => {
+  for (const [id, cases] of Object.entries(examples)) {
+    const scenario = findScenario(id);
+    for (const [roadmap, readiness] of cases) {
+      assert.deepEqual(sanitizeRoadmap(scenario, roadmap), roadmap, `${id} roadmap exceeds resources`);
+      assert.equal(scoreRoadmap(scenario, roadmap).readiness, readiness, `${id}: ${JSON.stringify(roadmap.starts)}`);
+    }
+  }
+  const tools = { sast: 0, sca: 0, secrets: 0, mfa: 0, waf: 0, container: 0 };
+  assert.equal(scoreRoadmap(orbitpay, plan(tools)).passed, false, "upgrading every free tool without foundations");
 });
 
 test("scenarios use 6, 12, and 18 month timelines measured in engineer-weeks", () => {
@@ -349,16 +451,19 @@ test("locking the map requires a complete initiative and the correct checkpoint 
   assert.equal(checkMapAnswer("split").correct, false);
 });
 
-test("simulator roadmaps seed the map, with upgrades and foundations as their own rows", () => {
-  const rows = rowsFromSimulation(orbitpay, ["sast", "ir", "inventory", "waf"]);
+test("simulator roadmaps seed the map with start-based timelines, upgrades, and foundations", () => {
+  const rows = rowsFromSimulation(orbitpay, plan({ sast: 0, ir: 3, inventory: 0, waf: 3 }));
   assert.equal(rows.length, 3);
   assert.equal(rows[0].initiative, "Upgrade existing SAST Pipeline Scanning");
-  assert.equal(rows[0].investment, "$6K and 3 engineer-weeks over 6 months");
+  assert.equal(rows[0].investment, "$6K and 3 engineer-weeks, starting now");
+  assert.equal(rows[0].timeline, "30");
   assert.equal(rows[1].initiative, "Incident Response Plan");
-  assert.equal(rows[1].investment, "$7K and 5 engineer-weeks over 6 months");
+  assert.equal(rows[1].investment, "$6K and 4 engineer-weeks, starting after 3 months");
+  assert.equal(rows[1].timeline, "90");
   assert.equal(rows[2].initiative, "Inventory, Risk Classification & Coverage Metrics");
   assert.equal(rows[0].metric, "");
   assert.equal(rows[0].impact, "");
   assert.deepEqual(sanitizeRows(rows).slice(0, 3), rows, "imported rows survive sanitizing unchanged");
   assert.equal(rowsFromSimulation(undefined, ["sast"])[0].initiative, "");
+  assert.equal(rowsFromSimulation(orbitpay, ["sast"])[0].timeline, "30", "a roadmap saved before start months imports as now");
 });
