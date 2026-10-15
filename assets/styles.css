@@ -551,6 +551,10 @@ footer { min-height: 56px; display: flex; justify-content: space-between; align-
 .run-preview li { margin: .15rem 0; }
 .run-preview b { margin-right: .35rem; color: var(--amber); font: .6rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
 .run-mode .run-note { margin: 0; color: var(--cyan); }
+.build-steps { margin: 0 0 1rem; padding-left: 1.1rem; color: var(--amber); font-size: .8rem; line-height: 1.45; }
+.build-steps li { margin: .15rem 0; }
+.resource-sub { display: block; margin-top: .35rem; color: var(--muted); font-size: .72rem; }
+.resource-note b, .initiative .mitigates b { color: var(--paper); }
 @container (max-width: 400px) {
   .gantt-row { grid-template-columns: minmax(0, 1fr); }
 }

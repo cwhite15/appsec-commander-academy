@@ -34,7 +34,7 @@ export const scoreWeights = { during: 0.5, handover: 0.5 };
 // An upgraded partial control ramps from 50% to full over this share of the control's ramp time.
 export const upgradeRampShare = 0.5;
 
-export const likelihoodDefinition = "Likelihood is the chance this incident happens at full impact within the company's timeline, not the chance that the weakness exists.";
+export const likelihoodDefinition = "Likelihood is the chance an incident happens at full impact within the company's timeline, not the chance that the weakness exists.";
 
 // Foundations make other controls work instead of stopping incidents themselves. Each control
 // is rated assuming its foundations are in place; each missing one takes away this share of
@@ -55,7 +55,7 @@ export const scenarios = [
   {
     id: "orbitpay",
     name: "OrbitPay",
-    tagline: "Fintech Startup · SOC 2 Type II in 6 Months",
+    tagline: "Fintech Scale-up · SOC 2 Type II Window in 6 Months",
     description: "A 120-person fintech processing payments. Microservices on AWS. No dedicated security team until now. The SOC 2 Type II observation window opens in 6 months.",
     headcount: 120,
     months: 6,
@@ -112,7 +112,7 @@ export const scenarios = [
     months: 18,
     budget: 250,
     engineerWeeks: 105,
-    staffing: "A two-person AppSec team, about 70% of it free for roadmap work",
+    staffing: "A two-person AppSec team, about two-thirds of it free for roadmap work",
     impactMultiplier: 1.0,
     newCodeShare: 0.7,
     impactNote: "Impact is driven by downtime and lost revenue at scale.",
@@ -169,7 +169,7 @@ export const incidents = [
   { id: "cred_stuffing", title: "Credential Stuffing Attack", description: "Attackers are using leaked passwords from another breach to attempt logins across your user base. Thousands of attempts per minute.", coverageNeeded: "credential_stuffing", severity: "high", baseImpactK: 200 },
   { id: "idor", title: "Broken Access Control (IDOR)", description: "A bug bounty researcher found that any user could access other users' records by changing an ID in the request.", coverageNeeded: "authz_flaw", severity: "critical", baseImpactK: 100 },
   { id: "container_vuln", title: "Vulnerable Container Deployed", description: "A container image with an unpatched kernel vulnerability was deployed to production without scanning.", coverageNeeded: "container_vuln", severity: "medium", baseImpactK: 60 },
-  { id: "ddos", title: "DDoS Traffic Spike", description: "Your platform is receiving 50x normal traffic. Legitimate users are being locked out during peak hours.", coverageNeeded: "ddos", severity: "medium", baseImpactK: 150 },
+  { id: "ddos", title: "DDoS Traffic Spike", description: "Your platform is receiving 50× normal traffic. Legitimate users are being locked out during peak hours.", coverageNeeded: "ddos", severity: "medium", baseImpactK: 150 },
   { id: "sqli", title: "SQL Injection in Payment Endpoint", description: "A penetration test discovered a SQL injection vulnerability in a critical payment endpoint. Data exfiltration is possible.", coverageNeeded: "code_injection", severity: "critical", baseImpactK: 250 },
   { id: "breach", title: "Suspected Data Breach", description: "Anomalous database queries detected at 3 AM. You need to determine scope and respond immediately.", coverageNeeded: "breach_response", severity: "high", baseImpactK: 500 },
   { id: "xss", title: "Stored XSS in Support Console", description: "A customer pasted a script into a support ticket. When an agent opened it, the script ran in the agent's session and quietly exported customer records.", coverageNeeded: "xss", severity: "high", baseImpactK: 120 },
@@ -183,11 +183,11 @@ export const incidents = [
 // How the five incidents in the run are picked. Neither mode changes the score.
 export const runModes = [
   { id: "inherent", label: "Biggest threats", summary: "The five largest risks before any controls", checks: "Tests whether your roadmap covers the threats that matter most to this company." },
-  { id: "current", label: "Biggest gaps today", summary: "The five largest risks left by what the company already has", checks: "Tests whether your roadmap closes the holes the company's existing controls leave." }
+  { id: "current", label: "Biggest gaps today", summary: "The five largest risks left by what the company already has", checks: "Tests whether your roadmap closes the gaps the company's current controls leave." }
 ];
 
 export const tiers = [
-  { min: 62, label: "Mission success", desc: "Your roadmap withstood the storm. The board is impressed." },
+  { min: 62, label: "Mission success", desc: "Your roadmap withstood the storm. The board can see the risk going down." },
   { min: 50, label: "Partial success", desc: "You survived, but with battle damage. Key gaps remain." },
   { min: 35, label: "Compromised", desc: "Critical gaps led to significant impact. Time to reassess." },
   { min: 0, label: "Mission failure", desc: "The roadmap could not defend against the threats." }
@@ -478,7 +478,7 @@ export function scoreRoadmap(scenario, roadmap) {
   return { readiness, dayOne: readinessOf(loss, "current"), during: readinessOf(loss, "during"), handover: readinessOf(loss, "handover"), loss, tier: tiers.find((tier) => readiness >= tier.min), passed: readiness >= passingReadiness };
 }
 
-// "One possible year": the five incidents with the largest expected loss, before controls or after the starting posture.
+// "One possible timeline": the five incidents with the largest expected loss, before controls or after the starting posture.
 // The attendee's roadmap never changes which five are picked.
 export function incidentRun(scenario, mode = "inherent") {
   const key = validRunMode(mode) === "current" ? "current" : "inherent";

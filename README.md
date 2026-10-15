@@ -7,7 +7,7 @@ This is the Commander track of the SAINTCON AppSec Academy, alongside the [Cadet
 ## Missions
 
 1. **The Command Protocols** (program components). Initiate the commands in four protocols (Define, Evaluate, Integrate, Measure) and pass a checkpoint for each one.
-2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), assess the controls it already runs, and fund or upgrade controls within its budget and per-phase engineer-weeks, choosing when each one starts, until expected loss across its 14-threat risk register falls by at least 62%. Controls ramp up over months, so sequencing matters. Then live through one possible year of five incidents, each landing in a set month.
+2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), assess the controls it already runs, and fund or upgrade controls within its budget and per-phase engineer-weeks, choosing when each one starts, until expected loss across its 14-threat risk register falls by at least 62%. Controls ramp up over months, so sequencing matters. Then live through one possible timeline of five incidents, each landing in a set month.
 3. **The Commander's Map** (roadmap planning). Fill in up to three initiatives (what, why, metric, timeline, investment, impact, effort), watch them stack-rank by impact vs. effort, pass the final checkpoint, and print the map.
 
 Each mission follows the academy loop: gather evidence, make a decision, verify it. Wrong answers explain why they fail. Completing all three awards the **Mission Commander** qualification and the Hackers Challenge token.
@@ -63,9 +63,9 @@ The protocol copy, simulator scenarios, initiatives, and incidents come from the
 - **Mission 02 was redesigned for SAINTCON 2026** (design specs and the calibration prototype are in [`docs/design/`](docs/design/)):
   - **18 controls** instead of 10, grouped by the five OWASP SAMM business functions and mapped to BSIMM16 and SAMM v2, with costs benchmarked against 2025–26 pricing.
   - **Four foundations** (Vulnerability Management, Inventory, Security Champions, Secure Coding Training) don't stop incidents themselves; each missing one cuts what the controls depending on it deliver.
-  - **14 threats and a risk register per company.** Readiness is the share of inherent expected loss (likelihood × impact across every threat) that the company's controls remove. Passing requires 66%.
+  - **14 threats and a risk register per company.** Readiness is the share of inherent expected loss (likelihood × impact across every threat) that the company's controls remove. Passing requires 62%.
   - **A starting posture per company:** some controls are already in place or partial (including shelfware), and partial ones can be upgraded for half price.
-  - **The five incidents are "one possible year"**, picked from the register by the biggest threats or by the biggest gaps today. The original drew 5 random incidents out of 8.
+  - **The five incidents are "one possible timeline"**, picked from the register by the biggest threats or by the biggest gaps today. The original drew 5 random incidents out of 8.
   - **Time to value:** each control starts now or after 3, 6, or 12 months and ramps up to full strength, capacity is split by phase, and the score weighs the loss during the timeline and the risk handed over at the end equally.
 - Controls are partially effective and layer (SAST 70% + Secure Defaults 75% = 93% of injection); detection and incident response limit loss instead of preventing it. The original treated any matching control as 100% effective and scored fixed points per incident.
 - Timelines are 6, 12, and 18 months instead of 6 to 10 weeks, and capacity is measured in engineer-weeks instead of engineer-hours. Each initiative costs a one-time setup plus a monthly run cost over the company's timeline, scaled to its headcount (see the comment at the top of `js/simulation.js`). Each company remains a separate, standalone scenario, with budget and capacity sized from a staffing story shown on its card.
