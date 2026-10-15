@@ -27,11 +27,18 @@ Each company is a separate, standalone scenario. Nothing carries over between th
 #### The flow
 
 1. **Choose a company.** Each card shows its timeline, budget, capacity, staffing, and a one-line starting posture.
-2. **Build.** The build screen groups 18 controls under the five OWASP SAMM business functions. Each card shows its posture (**In place**, **Partial**, or nothing), what it's rated against, how long it takes to ramp up, and a line such as *"Delivering 24% of 70% against injection by the end. Missing: Vulnerability Management (−50%), Security Champions (−25%)."* Funding a card places it at the earliest start month that still fits, and a **Start** picker under the card (Now, +3, +6, +12 months, where the timeline allows) moves it. Months that no longer fit are greyed out. The panel shows the budget, engineer-weeks **per phase**, and the company's **risk register**, which updates live: inherent → today → your roadmap. A sticky bar above the cards shows the same totals on a phone.
+2. **Build.** The build screen groups 18 controls under the five OWASP SAMM business functions. Each card shows its posture (**In place**, **Partial**, or nothing), what it's rated against, how long it takes to ramp up, and a line such as *"Delivering 24% of 70% against injection by the end. Missing: Vulnerability Management (−50%), Security Champions (−25%)."* Funding a card places it at the earliest start month that still fits, and a **Start** picker under the card (Now, +3, +6, +12 months, where the timeline allows) moves it. Months that no longer fit are greyed out. The **Resource Bay** panel follows the attendee as they scroll on a desktop (it scrolls on its own when it's taller than the screen). From top to bottom it shows:
+   - **Your score:** the live readiness percentage, with a meter, a marker at 62%, "N points to go", the day-one score, and one line explaining it. For example: "With no controls, OrbitPay faces $893K in expected loss. Your roadmap leaves $452K, so it removes 49%." It also shows the during and handover percentages it weighs equally.
+   - the budget, and engineer-weeks **per phase**
+   - the **roadmap timeline:** months across the top, amber lines at each phase start, the months the five incidents land (numbered to match the run setting), and one row per funded or upgraded control. Each row is blank until the control starts, then darkens as it ramps up. The shading samples `levelAt()` mid-month, as the score does. A partial control shows half-strength shading before its upgrade starts.
+   - the company's **risk register**, which updates live: inherent → today → your roadmap
+   - the **Simulation setting** (see "The incident run")
+
+   On a phone the columns stack, and a sticky bar above the cards shows the score and the same totals.
 3. **Launch.** Five incidents play out as "one possible year", each landing in a set month on a timeline strip. Each one is met by whatever had ramped up by then: *"Secrets Management (38% ramped)"*, *"Not started yet: the upgrade to MFA (starts after 12 months)"*. The attendee chooses how the five are picked (see "The incident run").
 4. **After-action report.** It shows readiness and tier, this year's loss, the expected loss during the timeline and at handover, and the three biggest remaining risks, each with what's holding it back and what would strengthen it.
 
-There is deliberately **no pass/fail indicator before launch**, so the mission doesn't turn into "toggle until it reads 62%". The register's total expected loss is live, because that is how a program lead actually uses a register.
+**The score is live before launch, on purpose** (changed 2026-10-15 after booth testing). Before that change the screen showed only dollar totals, and attendees couldn't tell how to measure progress against the 62% objective. Trying combinations until the score crosses 62 is the trade-off exploration the mission teaches: the timeline and the foundation penalties shape what they find. The incident run and the after-action report still carry the lessons about what got through and why.
 
 #### How a roadmap is scored
 
@@ -98,7 +105,13 @@ Four controls are **foundations**. They don't stop incidents themselves; they ma
 
 #### The incident run
 
-The five incidents are "one possible year". The attendee picks how they're chosen with the **Incident run** toggle beside **Launch**. **The toggle never changes readiness, pass or fail, or tier**: the score always comes from all 14 threats. Both modes are deterministic (ties break by loss, then impact, then id).
+The five incidents are "one possible year". The attendee picks how they're chosen with the **Simulation setting // incident run** box above **Launch**. The box:
+- explains that five incidents from the register land across the timeline, and that this setting picks which five
+- says what each mode tests
+- lists the five incidents it will send, with their landing months
+- says that it never changes the score
+
+When both modes send the same five, as they do at OrbitPay, the box says so, so the toggle doesn't seem broken. **The toggle never changes readiness, pass or fail, or tier**: the score always comes from all 14 threats. Both modes are deterministic (ties break by loss, then impact, then id).
 
 | Mode | Picks | OrbitPay | MediSecure | RetailRush |
 |---|---|---|---|---|

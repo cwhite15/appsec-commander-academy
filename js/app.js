@@ -1,6 +1,6 @@
 import { academyConfig } from "./config.js";
 import { checkAnswer, descriptionBlocks, findProtocol, protocols, totalCommands } from "./protocols.js";
-import { assessIncident, canPlace, controlStatus, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, formatImpact, formatPercent, groups, impactOf, incidentRun, incidents, initiatives, landingMonth, likelihoodDefinition, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode } from "./simulation.js";
+import { assessIncident, canPlace, controlStatus, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, formatImpact, formatPercent, fullStrengthMonth, groups, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, likelihoodDefinition, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startOf, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode } from "./simulation.js";
 import { buildIntro, checkMapAnswer, checkpoint as mapCheckpoint, fields, isRowComplete, isRowStarted, levels, maxFieldLength, rankRows, rowsFromSimulation, sanitizeRows, timelines } from "./roadmap.js";
 
 const main = document.querySelector("#main");
@@ -9,7 +9,7 @@ const printRoot = document.querySelector("#print-root");
 const missionIds = ["protocols", "simulator", "map"];
 const missionMeta = {
   protocols: { number: "01", glyph: "◈", title: "The Command Protocols", skill: "Program components", summary: "Initiate the four protocols every AppSec program runs on, and prove you know why each one matters.", objective: "Work through Define, Evaluate, Integrate, and Measure. Initiate each command to read it, then pass the checkpoint for every protocol.", takeaway: "An AppSec program is strategy, people, workflow, and measurement, not a tool purchase." },
-  simulator: { number: "02", glyph: "✦", title: "The Resource Gauntlet", skill: "Prioritization under pressure", summary: "Spend a limited budget and engineer-weeks against a company's risk register, then live through one possible year.", objective: `Choose a company, assess what it already runs, and fund a roadmap that cuts expected loss across its risk register by at least ${passingReadiness}%.`, takeaway: "Invest against the risks you actually face, and fund the foundations that make your tools work. You cannot afford everything." },
+  simulator: { number: "02", glyph: "✦", title: "The Resource Gauntlet", skill: "Prioritization under pressure", summary: "Spend a limited budget and engineer-weeks against a company's risk register, then live through one possible year.", objective: `Choose a company, assess what it already runs, and fund a roadmap that cuts expected loss across its risk register by at least ${passingReadiness}%. Once you pick a company, the Resource Bay keeps a live score: the share of its no-controls expected loss your roadmap removes.`, takeaway: "Invest against the risks you actually face, and fund the foundations that make your tools work. You cannot afford everything." },
   map: { number: "03", glyph: "⬡", title: "The Commander's Map", skill: "Roadmap planning", summary: "Turn what you learned into a stack-ranked plan you can take back to work.", objective: "Plan at least one complete initiative, let the map rank itself by impact and effort, and pass the final checkpoint to lock it in.", takeaway: "Stack-rank by impact vs. effort, and finish what you start." }
 };
 
@@ -356,12 +356,57 @@ function registerTemplate(scenario, roadmap) {
   const loss = expectedLoss(register);
   const largest = Math.max(...register.map((row) => row.inherent));
   const rows = register.map((row) => `<li class="register-row"><span class="register-head"><span>${escapeHtml(row.incident.title)}</span><b>${formatImpact(row.target)}</b></span><small>${formatPercent(row.likelihood)} × ${formatImpact(row.impact)} = ${formatImpact(row.inherent)} · today ${formatImpact(row.current)}</small><span class="register-bar" aria-hidden="true"><i class="inherent" data-meter="${percentOf(row.inherent, largest)}"></i><i class="current" data-meter="${percentOf(row.current, largest)}"></i><i class="target" data-meter="${percentOf(row.target, largest)}"></i></span></li>`).join("");
-  return `<span class="step-label">Risk register // expected loss</span>${lossTiles(loss)}<p class="resource-note">Your roadmap: ${formatLoss(loss.during)} during the ${scenario.months} months, ${formatLoss(loss.handover)} at the run rate you hand over. The score weighs them equally.</p><p class="definition">${escapeHtml(likelihoodDefinition)}</p><p class="register-legend"><span><i class="key target"></i>Left after your roadmap</span><span><i class="key current"></i>Your roadmap removes</span><span><i class="key inherent"></i>Already removed today</span></p><ol class="register">${rows}</ol>`;
+  return `<span class="step-label">Risk register // expected loss</span>${lossTiles(loss)}<p class="definition">${escapeHtml(likelihoodDefinition)}</p><p class="register-legend"><span><i class="key target"></i>Left after your roadmap</span><span><i class="key current"></i>Your roadmap removes</span><span><i class="key inherent"></i>Already removed today</span></p><ol class="register">${rows}</ol>`;
 }
 
-function runModeTemplate(mode) {
+// The live score: how much of the company's no-controls expected loss the roadmap removes, against the bar.
+function scoreTemplate(scenario, score) {
+  const { loss } = score;
+  const gap = passingReadiness - score.readiness;
+  const status = score.passed ? `At or above the ${passingReadiness}% bar` : `${gap} ${gap === 1 ? "point" : "points"} to go`;
+  return `<div class="readiness live-score${score.passed ? " passed" : ""}"><div class="readiness-head"><span>Your score // expected loss removed</span><strong>${score.readiness}%</strong></div><div class="meter score-meter${score.passed ? " full" : ""}"><i data-meter="${score.readiness}"></i><b class="goal" data-meter="${passingReadiness}" aria-hidden="true"></b></div><small>${status} · need ${passingReadiness}% · day one ${score.dayOne}%</small><p>With no controls, ${escapeHtml(scenario.name)} faces ${formatLoss(loss.inherent)} in expected loss. Your roadmap leaves ${formatLoss(loss.target)}, so it removes <b>${score.readiness}%</b>. That weighs ${score.during}% removed during the ${scenario.months} months and ${score.handover}% at handover equally.</p></div>`;
+}
+
+const rampClass = (level) => (level >= 1 ? "full" : level > 0 ? `ramp r${Math.ceil(level * 4)}` : "");
+
+// Month by month: when each control in the roadmap starts and how far it has ramped (sampled mid-month, as the
+// score is), with the phase starts and the months the incident run's five incidents land.
+function roadmapTimelineTemplate(scenario, roadmap, run) {
+  const months = Array.from({ length: scenario.months }, (_, month) => month);
+  const phaseStart = (month) => (month > 0 && startsFor(scenario).includes(month) ? "phase-start" : "");
+  const cell = (month, classes = "", text = "", title = "") => {
+    const names = [phaseStart(month), classes].filter(Boolean).join(" ");
+    return `<i${names ? ` class="${names}"` : ""}${title ? ` title="${escapeHtml(title)}"` : ""}>${text}</i>`;
+  };
+  const row = (label, cells, extra = "") => `<li class="gantt-row${extra}"><span class="gantt-label">${label}</span><span class="gantt-cells" aria-hidden="true">${cells}</span></li>`;
+  const landings = run.map((_, index) => landingMonth(scenario, index));
+  const controls = [...roadmap.activated].sort((a, b) => startOf(roadmap, a) - startOf(roadmap, b)).map((id) => {
+    const start = startOf(roadmap, id);
+    const fullBy = fullStrengthMonth(scenario, roadmap, id);
+    const atEnd = levelAt(scenario, roadmap, id, scenario.months - 1);
+    const note = fullBy <= scenario.months ? `full after ${Math.ceil(fullBy)} mo` : `${formatPercent(atEnd)} at handover`;
+    const cells = months.map((month) => {
+      const level = levelAt(scenario, roadmap, id, month);
+      return cell(month, rampClass(level), "", `Month ${month + 1}: ${formatPercent(level)}`);
+    }).join("");
+    return row(`${escapeHtml(optionName(scenario, id))}<small>${startLabel(start)} · ${note}</small>`, cells);
+  }).join("");
+  const axis = row("Month", months.map((month) => cell(month, "", month + 1)).join(""), " gantt-axis");
+  const incidentsRow = row("Incidents land", months.map((month) => {
+    const index = landings.indexOf(month);
+    return index < 0 ? cell(month) : cell(month, "landing", index + 1, `Incident ${index + 1}: ${run[index].title}`);
+  }).join(""), " gantt-incidents");
+  const empty = roadmap.activated.length ? "" : '<p class="gantt-empty">Fund a control and it appears here: when it starts, and how fast it ramps up.</p>';
+  return `<span class="step-label">Roadmap timeline // ${scenario.months} months</span><p class="resource-note">One row per control in your roadmap: blank until it starts, deeper as it ramps up. Your score counts the protection in place each month, plus where you end.</p><ol class="gantt">${axis}${incidentsRow}${controls}</ol>${empty}<p class="register-legend gantt-legend"><span><i class="key ramp"></i>Ramping up</span><span><i class="key full"></i>Full strength</span><span><i class="key landing"></i>Incident lands</span><span><i class="key phase"></i>Phase starts</span></p>`;
+}
+
+// The incident run is a setting for the simulation: it picks which five incidents the attendee lives through.
+function runModeTemplate(scenario, mode, run) {
   const current = runModes.find((item) => item.id === mode);
-  return `<fieldset class="run-mode"><legend>Incident run</legend><div class="segmented">${runModes.map((item) => `<label><input type="radio" name="run-mode" value="${item.id}"${item.id === mode ? " checked" : ""}><span>${escapeHtml(item.label)}</span></label>`).join("")}</div><small>${escapeHtml(current.summary)}. Changes which incidents you watch, not your score.</small></fieldset>`;
+  const preview = run.map((incident, index) => `<li><b>Month ${landingMonth(scenario, index) + 1}</b> ${escapeHtml(incident.title)}</li>`).join("");
+  const other = incidentRun(scenario, runModes.find((item) => item.id !== mode).id);
+  const same = other.every((incident, index) => incident.id === run[index].id) ? ` At ${escapeHtml(scenario.name)}, both settings happen to send the same five.` : "";
+  return `<fieldset class="run-mode"><legend>Simulation setting // incident run</legend><p>After you launch, five incidents from the register hit ${escapeHtml(scenario.name)}, spread across the ${scenario.months} months. This setting picks which five.</p><div class="segmented">${runModes.map((item) => `<label><input type="radio" name="run-mode" value="${item.id}"${item.id === mode ? " checked" : ""}><span>${escapeHtml(item.label)}</span></label>`).join("")}</div><p><b>${escapeHtml(current.label)}:</b> ${escapeHtml(current.summary)}. ${escapeHtml(current.checks)}</p><ol class="run-preview">${preview}</ol><p class="run-note">It never changes your score, which always counts all ${incidents.length} threats.${same}</p></fieldset>`;
 }
 
 function buildTemplate(scenario) {
@@ -369,17 +414,21 @@ function buildTemplate(scenario) {
   const spent = totals(scenario, state.sim);
   const budgetLeft = scenario.budget - spent.budget;
   const phases = phasesFor(scenario).map((phase, index) => ({ ...phase, left: phase.capacity - spent.phaseWeeks[index] }));
-  const loss = scoreRoadmap(scenario, state.sim).loss;
-  const summary = `<div class="live-summary"><span>$${budgetLeft}K left</span><span>Eng-wks left ${phases.map((phase) => `${startLabel(phase.start)} ${formatWeeks(phase.left)}`).join(" · ")}</span><span>Expected loss ${formatLoss(loss.current)} → <b>${formatLoss(loss.target)}</b></span></div>`;
+  const score = scoreRoadmap(scenario, state.sim);
+  const { loss } = score;
+  const run = incidentRun(scenario, runMode);
+  const summary = `<div class="live-summary"><span>Score <b>${score.readiness}%</b> / ${passingReadiness}%</span><span>$${budgetLeft}K left</span><span>Eng-wks left ${phases.map((phase) => `${startLabel(phase.start)} ${formatWeeks(phase.left)}`).join(" · ")}</span><span>Expected loss ${formatLoss(loss.current)} → <b>${formatLoss(loss.target)}</b></span></div>`;
   const phaseMeters = phases.map((phase) => `<div class="resource"><div class="resource-head"><span>Eng-weeks ${phaseName(phase)}</span><strong>${formatWeeks(phase.left)} / ${formatWeeks(phase.capacity)}</strong></div><div class="meter"><i data-meter="${percentOf(phase.left, phase.capacity)}"></i></div></div>`).join("");
   return {
     console: `<div class="briefing"><strong>${escapeHtml(scenario.name)} // ${escapeHtml(scenario.tagline)}</strong><br>${escapeHtml(scenario.description)}</div><div class="evidence intel"><strong>Threat intel:</strong> ${escapeHtml(scenario.threat)} ${escapeHtml(scenario.impactNote)}</div><div class="briefing posture"><strong>Starting posture:</strong> ${escapeHtml(scenario.postureStory)}</div><p class="answer-instruction">Fund new controls or upgrade partial ones. Ratings assume each control's foundations are in place and it has fully ramped up. Costs cover setup plus running it from its start to the end of the ${scenario.months} months, at ${escapeHtml(scenario.name)}'s size. Locked items fit no remaining phase.</p>${summary}${groups.map((group) => groupTemplate(scenario, group)).join("")}`,
     panel: `<span class="step-label">Resource bay</span><h2>${escapeHtml(scenario.name)}</h2>
+      ${scoreTemplate(scenario, score)}
       <div class="resource"><div class="resource-head"><span>Budget remaining</span><strong>$${budgetLeft}K / $${scenario.budget}K</strong></div><div class="meter"><i data-meter="${percentOf(budgetLeft, scenario.budget)}"></i></div></div>
       ${phaseMeters}<p class="resource-note">${scenario.months}-month timeline · ${escapeHtml(scenario.staffing)}. Engineer-weeks are split across phases; time you don't use in a phase is gone. Controls already running are business as usual and aren't charged here.</p>
+      ${roadmapTimelineTemplate(scenario, state.sim, run)}
       ${registerTemplate(scenario, state.sim)}
+      ${runModeTemplate(scenario, runMode, run)}
       <div class="feedback" id="feedback">${activated.length ? `${activated.length} ${activated.length === 1 ? "control" : "controls"} in your roadmap. Launch to live through one possible year.` : "Fund or upgrade at least one control to launch."}</div>
-      ${runModeTemplate(runMode)}
       <div class="actions"><button class="button" id="launch" type="button"${activated.length ? "" : " disabled"}>Launch simulation</button><button class="button secondary" id="change-scenario" type="button">Change company</button></div>`
   };
 }

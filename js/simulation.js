@@ -182,8 +182,8 @@ export const incidents = [
 
 // How the five incidents in the run are picked. Neither mode changes the score.
 export const runModes = [
-  { id: "inherent", label: "Biggest threats", summary: "The five largest risks before any controls" },
-  { id: "current", label: "Biggest gaps today", summary: "The five largest risks left by what the company already has" }
+  { id: "inherent", label: "Biggest threats", summary: "The five largest risks before any controls", checks: "Tests whether your roadmap covers the threats that matter most to this company." },
+  { id: "current", label: "Biggest gaps today", summary: "The five largest risks left by what the company already has", checks: "Tests whether your roadmap closes the holes the company's existing controls leave." }
 ];
 
 export const tiers = [
