@@ -98,8 +98,8 @@ function homeTemplate() {
 
 function shell(id, content) {
   const item = missionMeta[id];
-  return `<section class="mission-shell"><nav class="mission-nav"><a class="back-link" href="#/">← Academy deck</a><div class="progress-dots" aria-label="Mission progress">${missionIds.map((mid) => `<i class="progress-dot ${mid === id ? "active" : ""} ${isComplete(mid) ? "complete" : ""}"></i>`).join("")}</div></nav>
-    <header class="mission-header"><div><p class="eyebrow">Mission ${item.number} // ${item.skill}</p><h1>${item.title}</h1><div class="mission-objective"><span>Objective</span><p>${item.objective}</p></div></div><span class="classification">Commander clearance</span></header>${content}</section>`;
+  return `<div class="mission-stage mission-stage-${id}"><section class="mission-shell"><nav class="mission-nav"><a class="back-link" href="#/">← Academy deck</a><div class="progress-dots" aria-label="Mission progress">${missionIds.map((mid) => `<i class="progress-dot ${mid === id ? "active" : ""} ${isComplete(mid) ? "complete" : ""}"></i>`).join("")}</div></nav>
+    <header class="mission-header"><div><p class="eyebrow">Mission ${item.number} // ${item.skill}</p><h1>${item.title}</h1><div class="mission-objective"><span>Objective</span><p>${item.objective}</p></div></div><span class="classification">Commander clearance</span></header>${content}</section></div>`;
 }
 
 function consoleBox(title, bodyId) {
