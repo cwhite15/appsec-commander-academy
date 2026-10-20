@@ -394,6 +394,17 @@ export function controlStatus(scenario, roadmapInput, id) {
   };
 }
 
+// The share of its rating a control delivers in a month: ramp × foundations, and the new-code share where it applies.
+// The same figure as the card's "cuts loss from X by A% (of a possible B%)", measured against its top-rated threat.
+// Foundations stop nothing themselves, so theirs is just how far they have ramped.
+export function deliveredShareAt(scenario, roadmapInput, id, month) {
+  const roadmap = toRoadmap(roadmapInput);
+  const initiative = findInitiative(id);
+  const levels = levelsAt(scenario, roadmap, month);
+  const [category, rated] = Object.entries(initiative.mitigates).sort((a, b) => b[1] - a[1])[0] || [null, 0];
+  return category ? deliveredFor(initiative, category, levels, scenario) / rated : levels[id] || 0;
+}
+
 // Initiatives that lean on this foundation (or on detection, for IR).
 export function supportedBy(foundationId) {
   return initiatives.filter((initiative) => initiative.needs.includes(foundationId));
@@ -476,6 +487,37 @@ export function scoreRoadmap(scenario, roadmap) {
   const loss = expectedLoss(registerFor(scenario, roadmap));
   const readiness = readinessOf(loss, "target");
   return { readiness, dayOne: readinessOf(loss, "current"), during: readinessOf(loss, "during"), handover: readinessOf(loss, "handover"), loss, tier: tiers.find((tier) => readiness >= tier.min), passed: readiness >= passingReadiness };
+}
+
+// After a failed launch: the one change that lowers the roadmap's expected loss the most and still fits. It tries
+// funding each open control at its earliest start, starting each funded control earlier, and swapping one funded
+// control for an open one. Returns null when no single change helps.
+export function biggestFix(scenario, roadmapInput) {
+  const roadmap = toRoadmap(roadmapInput);
+  const lossOf = (candidate) => expectedLoss(registerFor(scenario, candidate)).target;
+  const withEarliest = (base, id) => startsFor(scenario)
+    .map((start) => ({ activated: [...base.activated, id], starts: { ...base.starts, [id]: start } }))
+    .find((candidate) => withinResources(scenario, candidate)) || null;
+  const open = initiatives.map((initiative) => initiative.id).filter((id) => postureOf(scenario, id) !== "in" && !roadmap.activated.includes(id));
+  const options = [];
+  for (const id of open) {
+    const candidate = withEarliest(roadmap, id);
+    if (candidate) options.push({ kind: "add", id, start: candidate.starts[id], roadmap: candidate });
+  }
+  for (const id of roadmap.activated) {
+    const start = startsFor(scenario).find((month) => month < startOf(roadmap, id) && withinResources(scenario, { activated: roadmap.activated, starts: { ...roadmap.starts, [id]: month } }));
+    if (start !== undefined) options.push({ kind: "move", id, start, from: startOf(roadmap, id), roadmap: { activated: roadmap.activated, starts: { ...roadmap.starts, [id]: start } } });
+  }
+  for (const drop of roadmap.activated) {
+    const rest = { activated: roadmap.activated.filter((id) => id !== drop), starts: Object.fromEntries(Object.entries(roadmap.starts).filter(([id]) => id !== drop)) };
+    for (const id of open) {
+      const candidate = withEarliest(rest, id);
+      if (candidate) options.push({ kind: "swap", id, drop, start: candidate.starts[id], roadmap: candidate });
+    }
+  }
+  const base = lossOf(roadmap);
+  const best = options.map((option) => ({ ...option, loss: lossOf(option.roadmap) })).sort((a, b) => a.loss - b.loss)[0];
+  return best && best.loss < base - tolerance ? { ...best, readiness: scoreRoadmap(scenario, best.roadmap).readiness } : null;
 }
 
 // "One possible timeline": the five incidents with the largest expected loss, before controls or after the starting posture.

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { checkAnswer, descriptionBlocks, protocols, totalCommands } from "../js/protocols.js";
-import { assessIncident, canPlace, controlStatus, costOf, deliveredFor, earliestStart, expectedLoss, findScenario, foundationFactor, formatImpact, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsFor, mitigationFor, optionCost, passingReadiness, penalties, phasesFor, registerFor, runSimulation, sanitizeRoadmap, scenarios, scoreRoadmap, scoreWeights, startsFor, strengthenOptions, tiers, totals, validRunMode, withinResources } from "../js/simulation.js";
+import { assessIncident, biggestFix, canPlace, controlStatus, costOf, deliveredFor, deliveredShareAt, earliestStart, expectedLoss, findScenario, foundationFactor, formatImpact, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsFor, mitigationFor, optionCost, passingReadiness, penalties, phasesFor, registerFor, runSimulation, sanitizeRoadmap, scenarios, scoreRoadmap, scoreWeights, startsFor, strengthenOptions, tiers, totals, validRunMode, withinResources } from "../js/simulation.js";
 import { difficultyOf, foundationIds, proveBestWithoutFoundations, score, searchContext } from "../scripts/roadmaps.mjs";
 import { checkMapAnswer, checkpoint, isRowComplete, maxFieldLength, rankRows, readyToLock, rowsFromSimulation, sanitizeRows } from "../js/roadmap.js";
 
@@ -281,6 +281,54 @@ test("restored roadmaps are rebuilt within resources, moving starts that no long
   assert.deepEqual(sanitizeRoadmap(orbitpay, ["mfa", "sca"]), { activated: ["mfa", "sca"], starts: { mfa: 0, sca: 0 } }, "a saved list from before start months still loads");
   assert.deepEqual(sanitizeRoadmap(orbitpay, "not a roadmap"), { activated: [], starts: {} });
   assert.deepEqual(sanitizeRoadmap(undefined, ["sca"]), { activated: [], starts: {} });
+});
+
+// The booth screenshot (2026-10-20): ten controls at OrbitPay with no Vulnerability Management, Champions or Detection.
+const unfounded = plan({ threat_modeling: 0, sca: 0, waf: 0, inventory: 0, ir: 0, training: 0, secure_defaults: 3, mfa: 3, sast: 3, container: 3 });
+
+test("the roadmap timeline shades what a control delivers: ramp × foundations, matching the card", () => {
+  assert.ok(withinResources(orbitpay, unfounded));
+  const last = orbitpay.months - 1;
+  for (const id of unfounded.activated) {
+    const status = controlStatus(orbitpay, unfounded, id);
+    const expected = status.initiative.foundation ? status.level : status.delivered / status.rated;
+    near(deliveredShareAt(orbitpay, unfounded, id, last), expected, id);
+  }
+  // Fully ramped, but held back by missing foundations: the old timeline called these "full strength".
+  assert.equal(levelAt(orbitpay, unfounded, "sast", last), 1);
+  near(deliveredShareAt(orbitpay, unfounded, "sast", last), 0.5 * 0.75);
+  near(deliveredShareAt(orbitpay, unfounded, "sca", last), 0.5);
+  near(deliveredShareAt(orbitpay, unfounded, "ir", last), 0.5);
+  // Before its upgrade starts, a partial control runs at half, still cut by its missing foundations.
+  assert.equal(levelAt(orbitpay, unfounded, "mfa", 0), 0.5);
+  assert.ok(deliveredShareAt(orbitpay, unfounded, "sast", 0) < 0.5);
+});
+
+test("after a failed launch, the biggest fix is the single change that cuts the most loss and still fits", () => {
+  const fix = biggestFix(orbitpay, unfounded);
+  assert.deepEqual([fix.kind, fix.drop, fix.id, fix.start], ["swap", "threat_modeling", "vuln_mgmt", 0]);
+  assert.equal(scoreRoadmap(orbitpay, unfounded).readiness, 53);
+  assert.equal(fix.readiness, 58);
+  assert.ok(withinResources(orbitpay, fix.roadmap));
+  // No single addition that fits does better.
+  const loss = (roadmap) => expectedLoss(registerFor(orbitpay, roadmap)).target;
+  for (const initiative of initiatives) {
+    if (unfounded.activated.includes(initiative.id)) continue;
+    const start = earliestStart(orbitpay, unfounded, initiative.id);
+    if (start === null) continue;
+    assert.ok(loss(fix.roadmap) <= loss({ activated: [...unfounded.activated, initiative.id], starts: { ...unfounded.starts, [initiative.id]: start } }) + 1e-9, initiative.id);
+  }
+  // The guide's second example: MediSecure with only SAST, DAST and Pen Testing.
+  const testing = plan({ sast: 0, dast: 0, pentest: 0 });
+  const swap = biggestFix(medisecure, testing);
+  assert.deepEqual([swap.kind, swap.drop, swap.id, swap.start, scoreRoadmap(medisecure, testing).readiness, swap.readiness], ["swap", "sast", "sca", 0, 28, 39]);
+  const cut = (roadmap) => registerFor(medisecure, roadmap).find((row) => row.incident.id === "dep_vuln").target;
+  assert.equal(formatImpact(cut(testing) - cut(swap.roadmap)), "$77K");
+  // From an empty roadmap the best first move is a plain addition, started now.
+  const first = biggestFix(medisecure, plan({}));
+  assert.equal(first.kind, "add");
+  assert.equal(first.start, 0);
+  assert.ok(first.readiness > scoreRoadmap(medisecure, plan({})).readiness);
 });
 
 test("an incident is met by whatever had ramped up by the month it lands", () => {
