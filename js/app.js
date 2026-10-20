@@ -1,6 +1,6 @@
 import { academyConfig } from "./config.js";
 import { checkAnswer, descriptionBlocks, findProtocol, protocols, totalCommands } from "./protocols.js";
-import { assessIncident, canPlace, controlStatus, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, formatImpact, formatPercent, fullStrengthMonth, groups, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, likelihoodDefinition, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startOf, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode, withinResources } from "./simulation.js";
+import { assessIncident, canPlace, controlStatus, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, effectivenessOf, formatImpact, formatPercent, foundationFactor, fullStrengthMonth, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsAt, likelihoodDefinition, missingFoundations, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startOf, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode, withinResources } from "./simulation.js";
 import { buildIntro, checkMapAnswer, checkpoint as mapCheckpoint, fields, isRowComplete, isRowStarted, levels, maxFieldLength, rankRows, rowsFromSimulation, sanitizeRows, timelines } from "./roadmap.js";
 
 const main = document.querySelector("#main");
@@ -373,13 +373,50 @@ function lossTiles(loss) {
   return `<div class="loss-tiles"><span><small>Inherent (no controls)</small><strong>${formatLoss(loss.inherent)}</strong></span><span><small>Residual today</small><strong>${formatLoss(loss.current)}</strong></span><span><small>Residual with your roadmap</small><strong>${formatLoss(loss.target)}</strong></span></div>`;
 }
 
-// Inherent → current → target expected loss for every threat, scaled to the company's largest risk.
+// A details element that stays open across repaints once the attendee opens it.
+const keptOpen = (key) => `data-keep="${key}"${lab.openDetails.has(key) ? " open" : ""}`;
+
+// Every control that directly cuts this threat, and where it stands: running or funded, partial, or not funded.
+function cutByTemplate(scenario, roadmap, category) {
+  const chips = helpfulInitiatives(category).filter((item) => item.direct).map(({ initiative }) => {
+    const posture = postureOf(scenario, initiative.id);
+    const on = posture === "in" || roadmap.activated.includes(initiative.id);
+    const [state, mark, label] = on ? ["on", " ✓", posture === "in" ? "running" : "in your roadmap"] : posture === "partial" ? ["half", " ½", "partial today"] : ["off", "", "not funded"];
+    return `<span class="chip ${state}" title="${escapeHtml(initiative.short)}: ${label}">${escapeHtml(initiative.short)}${mark}<span class="sr-only"> (${label})</span></span>`;
+  });
+  return chips.length ? `<span class="cutby"><b>Cut by:</b> ${chips.join("")}</span>` : "";
+}
+
+// The unfunded control that would cut this threat most, as it would actually deliver with the roadmap's foundations
+// (and the new-code cap), preferring one that still fits the remaining budget and engineer-weeks.
+function leverTemplate(scenario, roadmap, category) {
+  const levels = levelsAt(scenario, roadmap, scenario.months - 1);
+  const options = helpfulInitiatives(category)
+    .filter((item) => item.direct && postureOf(scenario, item.initiative.id) !== "in" && !roadmap.activated.includes(item.initiative.id))
+    .map(({ initiative }) => ({ initiative, start: earliestStart(scenario, roadmap, initiative.id), missing: missingFoundations(initiative, levels), share: effectivenessOf(initiative, category) * foundationFactor(initiative, levels) * shippedFactor(scenario, initiative, category) }))
+    .sort((x, y) => y.share - x.share);
+  const fitting = options.filter((item) => item.start !== null);
+  const best = fitting[0] || options[0];
+  if (!best) return "";
+  const verb = postureOf(scenario, best.initiative.id) === "partial" ? "Upgrade" : "Fund";
+  const missing = best.missing.length ? `; missing ${escapeHtml(listJoin(best.missing.map((item) => item.initiative.short)))}` : "";
+  const when = best.start === null ? "doesn't fit your remaining budget and eng-weeks" : `fits from ${startPhrase(best.start)}`;
+  const blocked = fitting.length && options[0] !== best ? ` (${escapeHtml(options[0].initiative.short)}, up to ${formatPercent(options[0].share)}, no longer fits)` : "";
+  return `<span class="lever"><b>${best.start === null ? "Biggest lever" : "Biggest lever that fits"}:</b> ${verb} ${escapeHtml(best.initiative.short)} (cuts up to ${formatPercent(best.share)}${missing}) · ${when}${blocked}</span>`;
+}
+
+// The register, biggest gap first: what's left of each threat, what cuts it, and the math behind it on request.
 function registerTemplate(scenario, roadmap) {
-  const register = registerFor(scenario, roadmap);
+  const register = [...registerFor(scenario, roadmap)].sort((x, y) => (y.target - x.target) || (y.inherent - x.inherent));
   const loss = expectedLoss(register);
   const largest = Math.max(...register.map((row) => row.inherent));
-  const rows = register.map((row) => `<li class="register-row"><span class="register-head"><span>${escapeHtml(row.incident.title)}</span><b>${formatImpact(row.target)} left</b></span><small>Likelihood ${formatPercent(row.likelihood)} × impact ${formatImpact(row.impact)} = ${formatImpact(row.inherent)} inherent · ${formatImpact(row.current)} today</small><span class="register-bar" aria-hidden="true"><i class="inherent" data-meter="${percentOf(row.inherent, largest)}"></i><i class="current" data-meter="${percentOf(row.current, largest)}"></i><i class="target" data-meter="${percentOf(row.target, largest)}"></i></span></li>`).join("");
-  return `<span class="step-label">Risk register // expected loss</span>${lossTiles(loss)}<p class="resource-note">Expected loss = likelihood × impact over the company's timeline. If you know ALE, this is the same idea${scenario.months === 12 ? "" : ` over ${scenario.months} months instead of a year`}.</p><p class="definition">${escapeHtml(likelihoodDefinition)}</p><p class="register-legend"><span><i class="key target"></i>Residual after your roadmap</span><span><i class="key current"></i>Your roadmap removes</span><span><i class="key inherent"></i>Already mitigated today</span></p><ol class="register">${rows}</ol>`;
+  const rows = register.map((row, index) => {
+    const category = row.incident.coverageNeeded;
+    const math = `<details class="row-math" ${keptOpen(`math-${row.incident.id}`)}><summary>The math</summary><p>Likelihood ${formatPercent(row.likelihood)} in ${scenario.months} months × impact ${formatImpact(row.impact)} = <b>${formatImpact(row.inherent)}</b> with no controls. ${formatImpact(row.current)} with what ${escapeHtml(scenario.name)} runs today. <b>${formatImpact(row.target)}</b> with your roadmap (${formatImpact(row.during)} averaged over the ${scenario.months} months, ${formatImpact(row.handover)} at handover, weighed equally).</p></details>`;
+    return `<li class="register-row"><span class="register-head"><span>${escapeHtml(row.incident.title)}</span><b>${formatImpact(row.target)} left</b></span><small>of ${formatImpact(row.inherent)} · ${formatPercent(1 - row.target / row.inherent)} cut</small><span class="register-bar" aria-hidden="true"><i class="inherent" data-meter="${percentOf(row.inherent, largest)}"></i><i class="current" data-meter="${percentOf(row.current, largest)}"></i><i class="target" data-meter="${percentOf(row.target, largest)}"></i></span>${cutByTemplate(scenario, roadmap, category)}${index === 0 ? leverTemplate(scenario, roadmap, category) : ""}${math}</li>`;
+  }).join("");
+  const how = `<details class="how" ${keptOpen("how")}><summary>How these numbers work</summary><p>${escapeHtml(likelihoodDefinition)}</p><p>Impact is what the incident costs ${escapeHtml(scenario.name)} if nothing stops it: response, fraud, notification, downtime. It scales with company size and sector.</p><p>Expected loss = likelihood × impact over the company's timeline. If you know ALE, this is the same idea${scenario.months === 12 ? "" : ` over ${scenario.months} months instead of a year`}.</p><p>"Left" weighs two things equally, as your score does: the average over the ${scenario.months} months, and the rate you hand over at the end. The rows add up to the Residual with your roadmap tile, give or take rounding.</p></details>`;
+  return `<span class="step-label">Risk register // expected loss</span>${lossTiles(loss)}<p class="register-intro">Expected loss is the average cost of a threat (its chance of happening × its cost), not a forecast. <b>Shrink the orange.</b></p>${how}<p class="register-legend"><span><i class="key target"></i>Left with your roadmap</span><span><i class="key current"></i>Your roadmap removes</span><span><i class="key inherent"></i>Already mitigated today</span></p><p class="register-legend chip-key"><span><span class="chip on">✓</span>Running or funded</span><span><span class="chip half">½</span>Partial today</span><span><span class="chip off">Name</span>Not funded</span></p><ol class="register">${rows}</ol>`;
 }
 
 // The live score: how much of the company's no-controls expected loss the roadmap removes, against the bar.
@@ -585,7 +622,7 @@ function startRun(mode) {
 }
 
 function bindSimulator() {
-  lab = { phase: activeScenario() ? "build" : "briefing", index: 0, results: [], revealed: false, assessing: false, closedGroups: new Set() };
+  lab = { phase: activeScenario() ? "build" : "briefing", index: 0, results: [], revealed: false, assessing: false, closedGroups: new Set(), openDetails: new Set() };
   const workspace = document.querySelector("#sim-workspace");
   paintSimulator();
 
@@ -625,6 +662,12 @@ function bindSimulator() {
 
   // Remember collapsed groups across repaints. toggle does not bubble, so listen in the capture phase.
   workspace.addEventListener("toggle", (event) => {
+    const keep = event.target.dataset?.keep;
+    if (keep) {
+      if (event.target.open) lab.openDetails.add(keep);
+      else lab.openDetails.delete(keep);
+      return;
+    }
     const group = event.target.dataset?.group;
     if (!group) return;
     if (event.target.open) lab.closedGroups.delete(group);
