@@ -148,6 +148,27 @@ lock_down_guest() {
     fi
   done
   ok "$GUEST_USER is not in the sudo or docker groups"
+
+  # Attendees pick the account on the login screen and press Enter.
+  # Ubuntu's PAM config (nullok) is what allows the empty password.
+  if [[ $(passwd -S "$GUEST_USER" | awk '{print $2}') != NP ]]; then
+    passwd -d "$GUEST_USER" >/dev/null
+  fi
+  ok "$GUEST_USER has no password (click it on the login screen and press Enter)"
+  if ! grep -qs nullok /etc/pam.d/common-auth; then
+    warn "/etc/pam.d/common-auth has no nullok, so the empty $GUEST_USER password won't log in."
+  fi
+
+  # The login screen stays in front of the guest desktop.
+  if grep -Eqs '^[[:space:]]*AutomaticLoginEnable[[:space:]]*=[[:space:]]*(true|1)' /etc/gdm3/custom.conf; then
+    sed -Ei 's/^[[:space:]]*(AutomaticLogin(Enable)?[[:space:]]*=)/#  \1/' /etc/gdm3/custom.conf
+    ok "turned off automatic login"
+  fi
+  ok "automatic login is off"
+
+  if systemctl is-active --quiet ssh; then
+    warn "The SSH server is running. The booth doesn't need it: sudo systemctl disable --now ssh"
+  fi
 }
 
 set_firefox_homepage() {
