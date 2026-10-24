@@ -12,7 +12,6 @@
 #
 # Options:
 #   --guest NAME            attendee account (default: guest)
-#   --navigator-repo URL    git URL of the Navigator academy repo
 set -Eeuo pipefail
 
 BOOTH_DIR=/opt/booth
@@ -30,9 +29,8 @@ REPOS=(
   "appsec-cadet-academy     https://github.com/sethlaw/appsec-cadet-academy.git"
   "appsec-officer-academy   https://github.com/sethlaw/appsec-officer-academy.git"
   "appsec-commander-academy https://github.com/cwhite15/appsec-commander-academy.git"
+  "SaintCon-AppSec-Dev-2026 https://github.com/phuleofatook/SaintCon-AppSec-Dev-2026.git"
 )
-NAVIGATOR_DIR=SaintCon-AppSec-Dev-2026
-NAVIGATOR_REPO=""
 ROUTES=(/cadets/ /navigators/ /communication-officers/ /commanders/)
 
 GUEST_USER=guest
@@ -55,8 +53,7 @@ while [[ $# -gt 0 ]]; do
     --event-mode) MODE=event ;;
     --unlock) MODE=unlock ;;
     --guest) GUEST_USER=${2:?--guest needs an account name}; shift ;;
-    --navigator-repo) NAVIGATOR_REPO=${2:?--navigator-repo needs a git URL}; shift ;;
-    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "Unknown option: $1 (see --help)" ;;
   esac
   shift
@@ -205,9 +202,6 @@ deploy_app() {
     read -r name url <<<"$entry"
     sync_repo "$name" "$url"
   done
-  if [[ -d $BOOTH_DIR/$NAVIGATOR_DIR || -n $NAVIGATOR_REPO ]]; then
-    sync_repo "$NAVIGATOR_DIR" "$NAVIGATOR_REPO"
-  fi
 
   # Only this laptop can reach the portal, not the conference network. An
   # override file keeps the change out of the repo, so git pull still works.
@@ -219,9 +213,15 @@ services:
 EOF
   chown "$ADMIN_USER:" "$PORTAL_DIR/docker-compose.override.yml"
 
-  if [[ ! -d $BOOTH_DIR/$NAVIGATOR_DIR ]]; then
-    APP_STATUS="not started (Navigator missing)"
-    warn "The Navigator academy is missing, so the app wasn't started. Re-run with --navigator-repo <git URL>, or copy it to $BOOTH_DIR/$NAVIGATOR_DIR."
+  # docker compose builds every academy from its own Dockerfile.
+  local missing=()
+  for entry in "${REPOS[@]}"; do
+    read -r name url <<<"$entry"
+    [[ -f $BOOTH_DIR/$name/Dockerfile ]] || missing+=("$name")
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    APP_STATUS="not started"
+    warn "No Dockerfile yet in: ${missing[*]}. The app can't be built until every academy has one."
     return
   fi
 
