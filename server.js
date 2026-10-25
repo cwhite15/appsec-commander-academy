@@ -5,7 +5,7 @@ import { extname, join, normalize } from "node:path";
 const port = Number(process.env.PORT || 8080);
 const root = new URL(".", import.meta.url).pathname;
 const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascript", ".png": "image/png", ".webp": "image/webp", ".svg": "image/svg+xml", ".woff2": "font/woff2" };
-const csp = "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const csp = "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self' https://appsec.community; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 createServer((request, response) => {
   const pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);

@@ -1,6 +1,6 @@
 # AppSec Mission Commander Academy
 
-A self-contained set of three AppSec program-building missions for SAINTCON 2026. Attendees learn the components of an application security program, defend a roadmap under resource pressure, and leave with a stack-ranked plan of their own. No model API, internet connection, database, account, or API key is required.
+A self-contained set of three AppSec program-building missions for SAINTCON 2026. Attendees learn the components of an application security program, defend a roadmap under resource pressure, and leave with a stack-ranked plan of their own. No model API, database, account, or API key is required. The missions work independently, while anonymous start/completion signals use the central tracker when internet access is available.
 
 This is the Commander track of the SAINTCON AppSec Academy, alongside the [Cadet](https://github.com/sethlaw/appsec-cadet-academy) and [Communication Officer](https://github.com/sethlaw/appsec-officer-academy) academies, and shares their visual system.
 
@@ -74,8 +74,10 @@ The protocol copy, simulator scenarios, initiatives, and incidents come from the
 
 ## Deployment notes
 
-- The nginx configuration and the Node server send a strict Content-Security-Policy. The app has no inline scripts or style attributes, and makes no network requests.
+- The nginx configuration and the Node server send a strict Content-Security-Policy. The app has no inline scripts or style attributes; its only external request is anonymous activity telemetry to `https://appsec.community/api/activity`.
 - Attendee progress and the map are stored only in that browser's `localStorage`. Everything typed into the map is escaped before rendering.
+- Localhost and gateway-hosted sessions both send start/completion signals to the central tracker. Map content, decisions, scores, and user-entered text are never transmitted.
+- **Reset progress** clears academy state plus the anonymous participant and browser-session identifiers, then reloads for the next attendee. Any queued, unsent events are retained for delivery.
 - Reset progress from the header between attendees on a shared station. This also clears their map.
 - Port `8088` follows the Cadet (`8086`) and Officer (`8087`) academies.
 

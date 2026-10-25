@@ -2,6 +2,7 @@ import { academyConfig } from "./config.js";
 import { checkAnswer, descriptionBlocks, findProtocol, protocols, totalCommands } from "./protocols.js";
 import { assessIncident, biggestFix, canPlace, controlStatus, deliveredShareAt, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, effectivenessOf, formatImpact, formatPercent, foundationFactor, fullStrengthMonth, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsAt, likelihoodDefinition, missingFoundations, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startOf, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode, withinResources } from "./simulation.js";
 import { buildIntro, checkMapAnswer, checkpoint as mapCheckpoint, fields, isRowComplete, isRowStarted, levels, maxFieldLength, rankRows, rowsFromSimulation, sanitizeRows, timelines } from "./roadmap.js";
+import { recordActivity, resetActivityIdentity } from "./tracker.js";
 
 const main = document.querySelector("#main");
 const toast = document.querySelector("#toast");
@@ -113,6 +114,7 @@ function continueLinks(id) {
 
 function completeMission(id) {
   if (!isComplete(id)) state.complete = missionIds.filter((mid) => mid === id || state.complete.includes(mid));
+  recordActivity("commander", id, "completed");
   saveState();
   notify(`Mission ${missionMeta[id].number} secured.`);
   const feedback = document.querySelector("#feedback");
@@ -935,10 +937,10 @@ function resetSession(confirmReset = true) {
   state = emptyState();
   lab = {};
   try { localStorage.removeItem(academyConfig.storageKey); } catch { /* nothing stored */ }
+  resetActivityIdentity();
   printRoot.innerHTML = "";
   window.location.hash = "#/";
-  route();
-  notify("Training progress reset.");
+  window.location.reload();
 }
 
 function route() {
@@ -954,6 +956,7 @@ function route() {
     if (id === "protocols") { main.innerHTML = protocolsMission(); bindProtocols(); }
     if (id === "simulator") { main.innerHTML = simulatorMission(); bindSimulator(); }
     if (id === "map") { main.innerHTML = mapMission(); bindMap(); }
+    recordActivity("commander", id, "started");
   } else main.innerHTML = homeTemplate();
   window.scrollTo({ top: 0, behavior: "instant" });
 }
