@@ -11,7 +11,7 @@
 #   sudo bash booth-setup.sh --unlock        undo --event-mode after the event
 #
 # Options:
-#   --guest NAME            attendee account (default: guest)
+#   --guest NAME            attendee account (default: guest, created if missing)
 set -Eeuo pipefail
 
 BOOTH_DIR=/opt/booth
@@ -34,6 +34,7 @@ REPOS=(
 ROUTES=(/cadets/ /navigators/ /communication-officers/ /commanders/)
 
 GUEST_USER=guest
+CREATE_GUEST=no
 MODE=setup
 APP_STATUS="not checked"
 WARNINGS=()
@@ -65,8 +66,13 @@ ADMIN_USER=${SUDO_USER:-}
   die "Run this from the laptop's admin account with sudo, not from a root shell."
 [[ $ADMIN_USER != "$GUEST_USER" ]] ||
   die "Run this from the admin account, not '$GUEST_USER'. Switch with: su - <admin account>"
-id "$GUEST_USER" >/dev/null 2>&1 ||
-  die "There is no '$GUEST_USER' account on this laptop. Name the attendee account with --guest NAME."
+if ! id "$GUEST_USER" >/dev/null 2>&1; then
+  # Only the default name is created, so a mistyped --guest can't add a
+  # stray account.
+  [[ $GUEST_USER == guest && $MODE == setup ]] ||
+    die "There is no '$GUEST_USER' account on this laptop. Check the name with: ls /home"
+  CREATE_GUEST=yes
+fi
 
 # shellcheck source=/dev/null
 . /etc/os-release
@@ -139,6 +145,10 @@ ensure_docker() {
 
 lock_down_guest() {
   step "Attendee account: $GUEST_USER"
+  if [[ $CREATE_GUEST == yes ]]; then
+    useradd -m -s /bin/bash -c Guest "$GUEST_USER"
+    ok "created the $GUEST_USER account"
+  fi
   # Either group would give attendees root on the laptop.
   local grp
   for grp in sudo docker; do
