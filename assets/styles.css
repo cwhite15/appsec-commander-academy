@@ -582,6 +582,37 @@ footer { min-height: 56px; display: flex; justify-content: space-between; align-
 .chip-key .chip { margin-right: .35rem; }
 .lever { display: block; margin-top: .45rem; padding-left: .5rem; border-left: 2px solid var(--amber); color: var(--paper); font-size: .72rem; line-height: 1.4; }
 .lever b { color: var(--amber); font: .58rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+/* Where this mission fits: the briefing's scope panel, register categories, and the after-action scope line */
+.scope { margin: 1rem 0; padding: .9rem; border: 1px solid rgba(115,229,241,.25); background: rgba(7,19,31,.6); }
+.scope-lede { margin: .4rem 0 .6rem; color: var(--paper); font-size: .88rem; line-height: 1.45; }
+.scope-lede b { color: var(--cyan); }
+.scope-source { margin: .4rem 0; color: var(--muted); font-size: .74rem; line-height: 1.45; }
+.routes { display: grid; gap: .55rem; margin: .3rem 0; padding: 0; list-style: none; }
+.route-head { display: flex; justify-content: space-between; gap: .5rem; color: var(--paper); font-size: .8rem; }
+.route-head strong { font-family: var(--font-mono); }
+.route-bar { display: block; height: 8px; margin: .2rem 0; background: rgba(7,19,31,.9); }
+.route-bar i { display: block; width: 0; height: 100%; background: rgba(155,176,183,.45); }
+.route.part .route-bar i { background: repeating-linear-gradient(90deg, var(--cyan) 0 6px, rgba(115,229,241,.45) 6px 9px); }
+.route small { display: block; color: var(--muted); font-size: .7rem; line-height: 1.35; }
+.scope-tag { margin-right: .2rem; padding: .03rem .3rem; font: normal .58rem var(--font-mono); text-transform: uppercase; letter-spacing: .05em; }
+.scope-tag.part { background: var(--cyan); color: var(--ink); }
+.scope-tag.out { border: 1px solid var(--line); color: var(--paper); }
+.scope-why { margin: .6rem 0 0; padding-left: .55rem; border-left: 2px solid var(--amber); color: var(--paper); font-size: .8rem; line-height: 1.45; }
+.scope-why b { color: var(--amber); }
+.scope-note { margin: .8rem 0; padding-left: .55rem; border-left: 2px solid var(--cyan); color: #c7d2d0; font-size: .82rem; line-height: 1.5; }
+.scope-note b { color: var(--cyan); }
+.cat-chip { padding: .02rem .3rem; color: var(--ink); font: normal .56rem var(--font-mono); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; vertical-align: 1px; }
+.cat-strip { display: flex; height: 12px; margin: .6rem 0 .3rem; }
+.cat-strip i { display: block; width: 0; height: 100%; }
+.cat-key { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: .2rem .8rem; margin: .3rem 0 .6rem; padding: 0; color: var(--paper); font-size: .72rem; list-style: none; }
+.cat-key i { display: inline-block; width: .7rem; height: .7rem; margin-right: .35rem; vertical-align: -1px; }
+.cat-key small { color: var(--muted); }
+.cat-code { background: #73e5f1; }
+.cat-deps { background: #f2c94c; }
+.cat-identity { background: #b39ddb; }
+.cat-cloud { background: #81c784; }
+.cat-avail { background: #ff8a65; }
+.cat-response { background: #9bb0b7; }
 @container (max-width: 400px) {
   .gantt-row { grid-template-columns: minmax(0, 1fr) 2.4rem; }
   .gantt-row .gantt-label { grid-column: 1 / -1; }

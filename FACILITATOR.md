@@ -42,6 +42,7 @@ Each company is a separate, standalone scenario. Nothing carries over between th
      - **Why (changed 2026-10-20 after booth testing):** the timeline used to shade by ramp-up alone and called fully ramped controls "full strength". In the booth screenshot (OrbitPay, no Vulnerability Management, Champions or Detection; 53%) it showed SCA, SAST, Cloud Posture and Incident Response at full strength while they delivered 50%, 37%, 50% and 50% of their ratings. It now teaches the foundations lesson instead of contradicting it.
    - the company's **risk register**, which updates live. It's built to answer "where is the most risk left, and what cuts it?":
      - **Tiles:** **Inherent (no controls)**, **Residual today**, **Residual with your roadmap**. The 14 rows add up to the last tile, give or take rounding.
+     - **Categories (added 2026-10-20):** under the tiles, a strip splits the company's inherent expected loss into six groups (`js/context.js`): Your code & design, Dependencies & build, Customer logins, Secrets & cloud config, Availability, Detection & response. Each row carries the matching chip. At OrbitPay the split is Customer logins 32%, Your code & design 31%, Secrets & cloud config 23%, Dependencies & build 8%, Detection & response 4%, Availability 1%. It shows the register is broader than code, and where it stops.
      - **One sentence above the rows:** *"Expected loss is the average cost of a threat (its chance of happening × its cost), not a forecast. Shrink the orange."*
      - **"How these numbers work"** (folded): the likelihood definition, what impact covers, the ALE note (*"…the same idea over N months instead of a year"*; MediSecure, at 12 months, omits the last clause), and how "left" blends the during and handover figures.
      - **Rows are sorted by what's left,** biggest first, so the top row is the next thing to fix. Each reads like *"SQL Injection in Payment Endpoint · $74K left · of $137K · 46% cut"* over a bar. The legend is **Left with your roadmap**, **Your roadmap removes**, **Already mitigated today**.
@@ -55,6 +56,29 @@ Each company is a separate, standalone scenario. Nothing carries over between th
 4. **After-action report.** It shows readiness and tier (the score caption reads *"% of risk removed or mitigated"* and **Passed** or "Need 62%"), this run's loss, stat tiles for **Stopped**, **Partly contained**, **Got through**, and **Loss this run**, the residual risk during the timeline and at handover, and the three biggest remaining risks, each with what's holding it back and what would strengthen it. **After a failed launch,** the verdict names the **biggest single fix** (`biggestFix()`): of every single change that still fits (fund one open control at its earliest start, start one funded control earlier, or swap one funded control for an open one), the one that cuts the most expected loss. For the booth screenshot roadmap above it says *"Biggest single fix: Swap Threat Modeling for Vulnerability Management, from month 1. That alone takes your score from 53% to 58%; you need 62%. It's a foundation: SCA, SAST and Cloud Posture in your roadmap each deliver 50% less without it."* When the fix isn't a foundation it names the threat it helps most instead, e.g. MediSecure with only SAST, DAST and Pen Testing: *"Swap SAST for SCA, from month 1. That alone takes your score from 28% to 39%; you need 62%. The biggest gain is on Dependency Vulnerability Exploited: $77K less expected loss."* It helps attendees without a moderator: one concrete next step, with the reason. It names one change, not a winning roadmap, so the attendee still has to rebalance.
 
 **The score is live before launch, on purpose** (changed 2026-10-15 after booth testing). Before that change the screen showed only dollar totals, and attendees couldn't tell how to measure progress against the 62% objective. Trying combinations until the score crosses 62 is the trade-off exploration the mission teaches: the timeline and the foundation penalties shape what they find. The incident run and the after-action report still carry the lessons about what got through and why.
+
+#### Where this mission fits (added 2026-10-20)
+
+The briefing panel has a **"Where this mission fits"** box, and the after-action report adds one line, so leaders know which slice of risk they're playing with. The aim is to keep the exercise intellectually honest, so leaders trust its value.
+
+- **The framing:** *"You're the AppSec lead. This mission is the application and platform slice of a company's risk. Your peers run identity, email and people, endpoint and edge, and third-party risk."*
+- **How attackers first got in,** Verizon DBIR 2026 (Figure 10, non-Error, non-Misuse breaches, n=20,023). These were checked word for word in the report text. Each route is tagged as partly this mission or another program:
+
+  | Route | Share | Tag |
+  |---|---|---|
+  | Exploitation of vulnerabilities | 31% | Partly this mission: your own web apps, not vendor products or edge devices (VPN and edge devices were 22% of exploitation in the 2025 DBIR) |
+  | Phishing | 16% | Another program |
+  | Credential abuse | 13% | Partly: customer logins (the MFA card), not staff, VPN or SSO credentials |
+  | Pretexting | 6% | Another program |
+
+  The four routes cover 66% of breaches; the rest are other or unknown. Across all 2026 breaches, a third party was involved in 48% and ransomware in 48%.
+- **Why play it anyway:** *"the app slice is where your engineering budget goes, and the same trade-offs apply to every program: foundations first, start the slow controls early, fund what cuts the most loss."*
+- **After-action line:** *"Your 53% is of OrbitPay's application and platform risk: the slice this mission models, not all of the company's risk. …"*
+- **Coaching:**
+  - If a leader asks "what about phishing or ransomware?", agree: those are real, and they're other programs' registers. The lesson carries over.
+  - Don't quote "web applications are in a third of breaches". That figure is chart-only in the 2025 DBIR and wasn't verified.
+  - The game's dollar figures are illustrative. Insurers' claims data puts real insured losses far lower (see `research/` in the workspace), so don't present them as expected annual losses.
+- **Not changed:** the score, the registers and the balance.
 
 #### How a roadmap is scored
 

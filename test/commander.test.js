@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { checkAnswer, descriptionBlocks, protocols, totalCommands } from "../js/protocols.js";
 import { assessIncident, biggestFix, canPlace, controlStatus, costOf, deliveredFor, deliveredShareAt, earliestStart, expectedLoss, findScenario, foundationFactor, formatImpact, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsFor, mitigationFor, optionCost, passingReadiness, penalties, phasesFor, registerFor, runSimulation, sanitizeRoadmap, scenarios, scoreRoadmap, scoreWeights, startsFor, strengthenOptions, tiers, totals, validRunMode, withinResources } from "../js/simulation.js";
 import { difficultyOf, foundationIds, proveBestWithoutFoundations, score, searchContext } from "../scripts/roadmaps.mjs";
+import { breachRoutes, categoryOf, riskCategories } from "../js/context.js";
+import { readFileSync } from "node:fs";
 import { checkMapAnswer, checkpoint, isRowComplete, maxFieldLength, rankRows, readyToLock, rowsFromSimulation, sanitizeRows } from "../js/roadmap.js";
 
 const orbitpay = findScenario("orbitpay");
@@ -514,4 +516,19 @@ test("simulator roadmaps seed the map with start-based timelines, upgrades, and 
   assert.deepEqual(sanitizeRows(rows).slice(0, 3), rows, "imported rows survive sanitizing unchanged");
   assert.equal(rowsFromSimulation(undefined, ["sast"])[0].initiative, "");
   assert.equal(rowsFromSimulation(orbitpay, ["sast"])[0].timeline, "30", "a roadmap saved before start months imports as now");
+});
+
+test("every threat sits in exactly one scope category, and the guide's breach routes match the briefing", () => {
+  for (const incident of incidents) assert.equal(riskCategories.filter((category) => category.incidents.includes(incident.id)).length, 1, incident.id);
+  assert.equal(riskCategories.flatMap((category) => category.incidents).length, incidents.length);
+  assert.equal(categoryOf("sqli").id, "code");
+  const guide = readFileSync(new URL("../FACILITATOR.md", import.meta.url), "utf8");
+  for (const route of breachRoutes.routes) assert.ok(guide.includes(`| ${route.label} | ${route.share}% |`), route.label);
+  assert.equal(breachRoutes.routes.reduce((sum, route) => sum + route.share, 0), 66);
+  assert.ok(guide.includes(`a third party was involved in ${breachRoutes.thirdParty}% and ransomware in ${breachRoutes.ransomware}%`));
+  // The guide's OrbitPay category split comes from the model.
+  const register = registerFor(orbitpay, []);
+  const total = register.reduce((sum, row) => sum + row.inherent, 0);
+  const share = (id) => Math.round((100 * register.filter((row) => categoryOf(row.incident.id).id === id).reduce((sum, row) => sum + row.inherent, 0)) / total);
+  assert.deepEqual(["identity", "code", "cloud", "deps", "response", "avail"].map(share), [32, 31, 23, 8, 4, 1]);
 });
