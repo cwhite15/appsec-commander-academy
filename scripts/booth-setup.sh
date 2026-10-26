@@ -30,8 +30,9 @@ REPOS=(
   "appsec-officer-academy   https://github.com/sethlaw/appsec-officer-academy.git"
   "appsec-commander-academy https://github.com/cwhite15/appsec-commander-academy.git"
   "SaintCon-AppSec-Dev-2026 https://github.com/phuleofatook/SaintCon-AppSec-Dev-2026.git"
+  "appsec-community-tracker https://github.com/sethlaw/appsec-community-tracker.git"
 )
-ROUTES=(/cadets/ /navigators/ /communication-officers/ /commanders/)
+ROUTES=(/cadets/ /navigators/ /communication-officers/ /commanders/ /tracker/ /api/health)
 
 GUEST_USER=guest
 CREATE_GUEST=no
@@ -257,7 +258,9 @@ EOF
   fi
 
   step "Building and starting the academy"
-  (cd "$PORTAL_DIR" && docker compose up -d --build --remove-orphans)
+  cd "$PORTAL_DIR"
+  docker compose up -d --build --remove-orphans
+  cd - >/dev/null
   check_app
 }
 
@@ -282,7 +285,7 @@ check_app() {
       warn "$route didn't load"
     fi
   done
-  APP_STATUS="portal up, $passed/${#ROUTES[@]} academies load"
+  APP_STATUS="portal up, $passed/${#ROUTES[@]} routes load"
 }
 
 event_mode() {
