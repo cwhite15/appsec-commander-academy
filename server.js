@@ -8,7 +8,14 @@ const types = { ".html": "text/html", ".css": "text/css", ".js": "text/javascrip
 const csp = "default-src 'self'; img-src 'self'; style-src 'self'; script-src 'self'; font-src 'self'; connect-src 'self' https://appsec.community; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 createServer((request, response) => {
-  const pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
+  // A request like "//" or a bad %-escape throws here, which would take the dev server down.
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
+  } catch {
+    response.writeHead(400, { "Content-Type": "text/plain" }).end("Bad request");
+    return;
+  }
   const relative = normalize(pathname === "/" ? "index.html" : pathname.slice(1));
   const file = join(root, relative);
 

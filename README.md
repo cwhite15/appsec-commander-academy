@@ -1,16 +1,19 @@
 # AppSec Mission Commander Academy
 
-A self-contained set of three AppSec program-building missions for SAINTCON 2026. Attendees learn the components of an application security program, defend a roadmap under resource pressure, and leave with a stack-ranked plan of their own. No model API, database, account, or API key is required. The missions work independently, while anonymous start/completion signals use the central tracker when internet access is available.
+A self-contained AppSec program-building game for SAINTCON 2026. Attendees learn the four parts of an application security program, fund a one-year roadmap with a fixed budget and a small team, and watch it hold up, or not, against the attacks that land at the end of the year. No model API, database, account, or API key is required. The game works offline, and anonymous start and completion signals go to the central tracker when internet access is available.
 
 This is the Commander track of the SAINTCON AppSec Academy, alongside the [Cadet](https://github.com/sethlaw/appsec-cadet-academy) and [Communication Officer](https://github.com/sethlaw/appsec-officer-academy) academies, and shares their visual system.
 
-## Missions
+## The flow
 
-1. **The Command Protocols** (program components). Initiate the commands in four protocols (Define, Evaluate, Integrate, Measure) and pass a checkpoint for each one.
-2. **The Resource Gauntlet** (prioritization under pressure). Choose one of three standalone companies (6, 12, or 18-month timelines), assess the controls it already runs, and fund or upgrade controls within its budget and per-phase engineer-weeks, choosing when each one starts, until expected loss across its 14-threat risk register falls by at least 62%. Controls ramp up over months, so sequencing matters. Then live through one possible timeline of five incidents, each landing in a set month.
-3. **The Commander's Map** (roadmap planning). Fill in up to three initiatives (what, why, metric, timeline, investment, impact, effort), watch them stack-rank by impact vs. effort, pass the final checkpoint, and print the map.
+1. **Why it matters.** Two sourced numbers from the Verizon Data Breach Investigations Reports for 2025 and 2026.
+2. **Four parts of a program.** Define, Evaluate, Integrate, Measure. Open all four to continue.
+3. **Build your roadmap.** Run the security program at OrbitPay, a fictional fintech, for one year. Place 18 initiative cards into four quarters, within one budget and a team cap per quarter. Program work makes tools work: a card runs at half strength for each prerequisite that isn't in place by its quarter, and only a card at full strength can stop an attack outright.
+4. **The end-of-year attack simulation.** An animated console drops your cards in as a shield, then six attacks test it. The program score is the risk you cut, weighted by how likely each attack is.
+5. **After-action report.** What each attack did, and why: prevented, risk cut, or unprotected, naming any missing prerequisite. Adjust the roadmap and run it again, or finish.
+6. **Finish.** The Hackers Challenge token, and QR codes for BSIMM, OWASP SAMM and a roadmap worksheet to keep building.
 
-Each mission follows the academy loop: gather evidence, make a decision, verify it. Wrong answers explain why they fail. Completing all three awards the **Mission Commander** qualification and the Hackers Challenge token.
+Every cost, team size and cut in the game is an illustrative game value, not industry data. The facilitator guide, [`FACILITATOR.md`](FACILITATOR.md), covers the rules, booth operations and teaching notes.
 
 ## Run it
 
@@ -28,7 +31,7 @@ With Node.js 20 or later:
 npm start
 ```
 
-Open <http://localhost:8080>. There are no npm dependencies to install.
+Open <http://localhost:8080>, or run `PORT=8088 npm start` to match the Docker port. There are no npm dependencies to install.
 
 ES modules mean opening `index.html` directly with a `file:` URL is not supported.
 
@@ -38,68 +41,62 @@ ES modules mean opening `index.html` directly with a `file:` URL is not supporte
 npm test
 ```
 
-The tests cover checkpoint integrity, the risk registers, simulator scoring, foundations, starting posture, the cost model, resource limits, ranking, and input sanitizing. They also search every company's roadmaps, start months included (a few seconds), to show each one is winnable but hard: the best roadmap clears the bar comfortably, many different roadmaps win, and every control appears in some winning roadmap. That no roadmap wins without funding a foundation is proved exhaustively over every start month.
+The tests use Node's built-in test runner. They cover the game model's rules and the scores of known roadmaps, the attack simulation engine, the tracker and CSP wiring, and that the facilitator guide's numbers match the game model.
 
-To see each company's difficulty and best roadmaps while tuning numbers:
+To check the game's balance after changing any number in `js/model.js`:
 
 ```sh
-node scripts/calibrate.mjs
+node scripts/check.mjs             # exact: scores every affordable roadmap, on all CPU cores (a few minutes)
+node scripts/check.mjs --sample N  # a uniform random sample of N roadmaps, fast, for tuning
 ```
+
+It reports how many roadmaps win, the best ones, which cards matter, and whether the balance targets pass.
 
 ## Re-skinning
 
-Event copy, the CTF token, rank labels, image paths, color palette, and interaction timing live in [`js/config.js`](js/config.js), using the same shape as the other academies. [`assets/styles.css`](assets/styles.css) is the academy stylesheet unchanged, with Commander components appended in a marked section at the end.
+The Hackers Challenge CTF token is the only setting in [`js/config.js`](js/config.js). [`assets/styles.css`](assets/styles.css) is the shared academy stylesheet, and [`assets/commander.css`](assets/commander.css) adds the Commander components on top.
 
-Content is isolated from the UI:
+Content is isolated from the UI: every game number (cards, costs, team caps, attacks, weights and cuts) lives in [`js/model.js`](js/model.js), and the UI, the simulation and the balance check all read it from there.
 
-- [`js/protocols.js`](js/protocols.js): Mission 01 protocol copy and checkpoints
-- [`js/simulation.js`](js/simulation.js): Mission 02 scenarios, risk registers, starting posture, controls, incidents, and scoring
-- [`js/roadmap.js`](js/roadmap.js): Mission 03 worksheet fields, ranking, and checkpoint
-
-## Content source
-
-The protocol copy, simulator scenarios, initiatives, and incidents come from the Wasatch AppSec community app's "Build an AppSec Roadmap" and "Roadmap Simulator" pages, originally built on Base44. Changes from the original:
-
-- **Mission 02 was redesigned for SAINTCON 2026** (design specs and the calibration prototype are in [`docs/design/`](docs/design/)):
-  - **18 controls** instead of 10, grouped by the five OWASP SAMM business functions and mapped to BSIMM16 and SAMM v2, with costs benchmarked against 2025–26 pricing.
-  - **Four foundations** (Vulnerability Management, Inventory, Security Champions, Secure Coding Training) don't stop incidents themselves; each missing one cuts what the controls depending on it deliver.
-  - **14 threats and a risk register per company.** Readiness is the share of inherent expected loss (likelihood × impact across every threat) that the company's controls remove. Passing requires 62%.
-  - **A starting posture per company:** some controls are already in place or partial (including shelfware), and partial ones can be upgraded for half price.
-  - **The five incidents are "one possible timeline"**, picked from the register by the biggest threats or by the biggest gaps today. The original drew 5 random incidents out of 8.
-  - **Time to value:** each control starts now or after 3, 6, or 12 months and ramps up to full strength, capacity is split by phase, and the score weighs the loss during the timeline and the risk handed over at the end equally.
-- Controls are partially effective and layer (SAST 70% + Secure Defaults 75% = 93% of injection); detection and incident response limit loss instead of preventing it. The original treated any matching control as 100% effective and scored fixed points per incident.
-- Timelines are 6, 12, and 18 months instead of 6 to 10 weeks, and capacity is measured in engineer-weeks instead of engineer-hours. Each initiative costs a one-time setup plus a monthly run cost over the company's timeline, scaled to its headcount (see the comment at the top of `js/simulation.js`). Each company remains a separate, standalone scenario, with budget and capacity sized from a staffing story shown on its card.
-- Incident financial impact is scaled to each company (size × sector exposure) instead of a flat $15K to $40K, and readiness is computed from it.
-- Checkpoint questions were added to each protocol, written from that protocol's own guidance.
-
-## Deployment notes
-
-- The nginx configuration and the Node server send a strict Content-Security-Policy. The app has no inline scripts or style attributes; its only external request is anonymous activity telemetry to `https://appsec.community/api/activity`.
-- Attendee progress and the map are stored only in that browser's `localStorage`. Everything typed into the map is escaped before rendering.
-- Localhost and gateway-hosted sessions both send start/completion signals to the central tracker. Map content, decisions, scores, and user-entered text are never transmitted.
-- **Reset progress** clears academy state plus the anonymous participant and browser-session identifiers, then reloads for the next attendee. Any queued, unsent events are retained for delivery.
-- Reset progress from the header between attendees on a shared station. This also clears their map.
-- Port `8088` follows the Cadet (`8086`) and Officer (`8087`) academies.
-
-## Content map
+## File layout
 
 ```text
 appsec-commander-academy/
-├── assets/             Shared academy theme, fonts, and artwork
-├── js/config.js        Event/rank/theme configuration
-├── js/protocols.js     Mission 01 content and grading
-├── js/simulation.js    Mission 02 content and scoring
-├── js/roadmap.js       Mission 03 worksheet and ranking
-├── js/app.js           UI, routing, progression, and mission flow
-├── test/               Node built-in tests
-├── scripts/            Calibration: brute-forces every affordable roadmap
-├── docs/design/        Mission 02 design specs and prototype (not served)
-├── Dockerfile          Production nginx image
-├── docker-compose.yml  One-command local deployment
-├── FACILITATOR.md      Booth operation and teaching notes
-└── index.html          Application shell
+├── index.html             Application shell
+├── js/app.js              UI, screens, flow, and on-screen copy
+├── js/model.js            The game model: cards, attacks, rules, and scoring
+├── js/sim/engine.js       Attack simulation: turns a roadmap into a layout and timeline
+├── js/sim/renderer.js     Attack simulation: canvas animation
+├── js/tracker.js          Anonymous activity telemetry
+├── js/config.js           The CTF token
+├── assets/styles.css      Shared academy theme
+├── assets/commander.css   Commander components
+├── assets/qr/             Finish-screen QR codes
+├── assets/                Fonts and artwork
+├── scripts/check.mjs      Balance check: scores every affordable roadmap
+├── test/                  Node built-in tests
+├── server.js              Small static server for npm start (local development)
+├── nginx.conf             Production nginx config with the CSP
+├── Dockerfile             Production nginx image
+├── docker-compose.yml     One-command local deployment
+└── FACILITATOR.md         Booth guide and teaching notes
 ```
 
-## Artwork
+## Deployment notes
 
-The OWASP space logo, academy-ranks graphic, and fonts in `assets/` are the shared academy assets from the Cadet and Officer academies. The Commander academy has its own hero image (`saintcon-appsec-hero.webp`, the mission control "AppSec Program Launch" scene) and gray-background "AppSec Needs You" recruitment poster (`appsec-needs-you.png`).
+- The nginx configuration and the Node server send a strict Content-Security-Policy. The app has no inline scripts or style attributes. Its only external request is anonymous activity telemetry to `https://appsec.community/api/activity`.
+- Start and completion signals are the only data sent. The roadmap, choices, scores, and anything else the attendee does are never transmitted.
+- The roadmap lives only in memory. **Start over** reloads the page and clears the anonymous participant and browser-session identifiers, ready for the next attendee.
+- A browser can opt out of telemetry with `localStorage.setItem("appsec-community-analytics-opt-out", "true")`.
+- In the full academy, the portal gateway serves this app at `/commanders/`.
+- Port `8088` follows the Cadet (`8086`) and Officer (`8087`) academies.
+
+## Earlier version
+
+The previous three-mission version (The Command Protocols, The Resource Gauntlet, and The Commander's Map) lives on the `classic-commander` branch.
+
+## Credits
+
+The shared academy stylesheet, fonts, OWASP space logo, and activity tracker come from Seth Law's Cadet and Officer academies. The Commander academy has its own hero image (`saintcon-appsec-hero.webp`, the mission control "AppSec Program Launch" scene).
+
+The four-part program structure and the initiatives come from the Wasatch AppSec community app's "Build an AppSec Roadmap" page. Each card carries a BSIMM and OWASP SAMM reference.

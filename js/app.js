@@ -1,996 +1,705 @@
-import { academyConfig } from "./config.js";
-import { checkAnswer, descriptionBlocks, findProtocol, protocols, totalCommands } from "./protocols.js";
-import { assessIncident, biggestFix, canPlace, controlStatus, deliveredShareAt, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, effectivenessOf, formatImpact, formatPercent, foundationFactor, fullStrengthMonth, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsAt, likelihoodDefinition, missingFoundations, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startOf, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode, withinResources } from "./simulation.js";
-import { breachRoutes, categoryOf, riskCategories } from "./context.js";
-import { buildIntro, checkMapAnswer, checkpoint as mapCheckpoint, fields, isRowComplete, isRowStarted, levels, maxFieldLength, rankRows, rowsFromSimulation, sanitizeRows, timelines } from "./roadmap.js";
+// Mission Commander path. One state object, a full repaint on every change,
+// and delegated clicks. Every game number comes from model.js, so the UI never
+// repeats a cost, cap, or cut.
+import { components, resources, initiatives, scenarios, WIN_BAR, byId, spend, fits, missingFoundations, runAll } from "./model.js";
 import { recordActivity, resetActivityIdentity } from "./tracker.js";
+import { academyConfig } from "./config.js";
+
+const CTF_TOKEN = academyConfig.ctfToken;
+// Finish-screen resources. All three URLs were checked 2026-10-27; the BSIMM report sits behind an email form.
+const BSIMM_URL = "https://www.blackduck.com/resources/analyst-reports/bsimm.html";
+const SAMM_URL = "https://owaspsamm.org/";
+const REDPOINT_URL = "https://redpointsecurity.com/appsec-program-roadmap-worksheet/";
+const RESOURCE_LINKS = [
+  { label: "BSIMM report", url: BSIMM_URL, image: "./assets/qr/bsimm.svg" },
+  { label: "OWASP SAMM", url: SAMM_URL, image: "./assets/qr/samm.svg" },
+  { label: "Redpoint roadmap worksheet", url: REDPOINT_URL, image: "./assets/qr/redpoint.svg" }
+];
+const STEPS = ["Why it matters", "Four parts", "Roadmap", "The year", "Finish"];
+const SCREEN = { stat: 0, briefing: 1, build: 2, year: 3, finish: 4 };
 
 const main = document.querySelector("#main");
 const toast = document.querySelector("#toast");
-const printRoot = document.querySelector("#print-root");
-const missionIds = ["protocols", "simulator", "map"];
-const missionMeta = {
-  protocols: { number: "01", glyph: "◈", title: "The Command Protocols", skill: "Program components", summary: "Learn the four parts: Define, Evaluate, Integrate, and Measure. Each one ends with a quick checkpoint.", objective: "Work through Define, Evaluate, Integrate, and Measure. Initiate each command to read it, then pass the checkpoint for every protocol.", takeaway: "An AppSec program is strategy, people, workflow, and measurement, not a tool purchase." },
-  simulator: { number: "02", glyph: "✦", title: "The Resource Gauntlet", skill: "Prioritization under pressure", summary: "Spend a limited budget and engineer-weeks against a company's risk register, then play out one possible run of five incidents.", objective: `You're the new AppSec lead. Pick a company and spend its budget and engineering time on the controls that cut its risk the most. Remove at least ${passingReadiness}% of its expected loss from security incidents to pass. Your score updates live as you build.`, takeaway: "Invest against the risks you actually face, and fund the foundations that make your tools work. You cannot afford everything." },
-  map: { number: "03", glyph: "⬡", title: "The Commander's Map", skill: "Roadmap planning", summary: "Turn what you learned into a stack-ranked plan you can take back to work.", objective: "Plan at least one complete initiative, let the map rank itself by impact and effort, and pass the final checkpoint to lock it in.", takeaway: "Stack-rank by impact vs. effort, and finish what you start." }
-};
+const simRoot = document.querySelector("#sim-root");
 
-const emptyState = () => ({ complete: [], protocols: [], sim: { scenarioId: null, activated: [], starts: {}, runMode: runModes[0].id }, map: { rows: sanitizeRows([]), checkpointPassed: false } });
-let state = loadState();
-let lab = {};
+// openGroups: which component groups are expanded on phones (desktop always shows all four).
+// "Start over" reloads the page, so this is the only place state is created.
+const state = { screen: SCREEN.stat, seen: new Set(), expanded: new Set(), openGroups: new Set([components[0].id]), plan: {}, run: null, reveal: 0, hint: false };
 
-function loadState() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(academyConfig.storageKey));
-    if (!saved || typeof saved !== "object") return emptyState();
-    const scenario = findScenario(saved.sim?.scenarioId);
-    const roadmap = sanitizeRoadmap(scenario, saved.sim);
-    return {
-      complete: Array.isArray(saved.complete) ? missionIds.filter((id) => saved.complete.includes(id)) : [],
-      protocols: Array.isArray(saved.protocols) ? protocols.map((protocol) => protocol.id).filter((id) => saved.protocols.includes(id)) : [],
-      sim: { scenarioId: scenario ? scenario.id : null, activated: roadmap.activated, starts: roadmap.starts, runMode: validRunMode(saved.sim?.runMode) },
-      map: { rows: sanitizeRows(saved.map?.rows), checkpointPassed: saved.map?.checkpointPassed === true }
-    };
-  } catch { return emptyState(); }
-}
+/* Helpers */
 
-function saveState() {
-  try { localStorage.setItem(academyConfig.storageKey, JSON.stringify(state)); } catch { /* storage unavailable: progress lasts for this page only */ }
+// Spelled out because it starts a sentence; follows the model's scenario count.
+function attackCountWord() {
+  const words = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"];
+  return words[scenarios.length] || String(scenarios.length);
 }
-function isComplete(id) { return state.complete.includes(id); }
-function notify(message) {
-  toast.textContent = message;
-  toast.classList.add("show");
-  window.setTimeout(() => toast.classList.remove("show"), 2600);
-}
-const pause = (milliseconds) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-const reduceMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const wait = (milliseconds) => pause(reduceMotion() ? 0 : milliseconds);
 
 function escapeHtml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
 }
 
-function shuffled(items) {
-  const copy = [...items];
-  for (let index = copy.length - 1; index > 0; index -= 1) {
-    const swap = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[swap]] = [copy[swap], copy[index]];
-  }
-  return copy;
-}
-
-// Meter widths are applied through the CSSOM so the page needs no inline style attributes.
+// Meter widths go through the CSSOM so the strict CSP never sees an inline style attribute.
 function paintMeters(root = document) {
   root.querySelectorAll("[data-meter]").forEach((element) => {
     element.style.width = `${Math.max(0, Math.min(100, Number(element.dataset.meter) || 0))}%`;
   });
 }
 
-function applyTheme() {
-  const root = document.documentElement;
-  const variableNames = { ink: "ink", panel: "panel", panelBright: "panel-bright", cyan: "cyan", teal: "teal", amber: "amber", coral: "coral", paper: "paper", muted: "muted" };
-  Object.entries(academyConfig.theme).forEach(([key, value]) => root.style.setProperty(`--${variableNames[key]}`, value));
-  document.querySelector("#academy-name").textContent = academyConfig.academy;
-  document.querySelector("#event-name").textContent = academyConfig.event;
-  document.querySelector("#brand-logo").src = academyConfig.assets.logo;
+function notify(message) {
+  toast.textContent = message;
+  toast.classList.add("show");
+  window.setTimeout(() => toast.classList.remove("show"), 2600);
 }
 
-function homeTemplate() {
-  const cards = missionIds.map((id, index) => {
-    const item = missionMeta[id];
-    const locked = index > 0 && !isComplete(missionIds[index - 1]);
-    return `<article class="mission-card ${isComplete(id) ? "complete" : ""}" data-glyph="${item.glyph}">
-      <span class="mission-number">Mission ${item.number} ${isComplete(id) ? "// Complete" : ""}</span>
-      <h3>${item.title}</h3><span class="skill-tag">${item.skill}</span><p>${item.summary}</p>
-      <a class="button ${locked ? "secondary" : ""}" href="${locked ? "#/" : `#/mission/${id}`}" ${locked ? 'aria-disabled="true"' : ""}>${isComplete(id) ? "Review mission" : locked ? "Complete prior mission" : "Begin mission"}</a>
-    </article>`;
+// Floor (with a float guard) so a 79.6% score never displays as "80%" next to "Short of 80%".
+const percent = (fraction) => Math.floor(fraction * 100 + 1e-6);
+const fteLabel = (value) => String(Math.round(value * 100) / 100);
+const quarterName = (index) => resources.quarters[index];
+const percentOf = (part, whole) => (whole ? (part / whole) * 100 : 0);
+const winPercent = percent(WIN_BAR);
+const weightLabel = (weight) => `${Math.round(weight * 100)}% of score`;
+const byWeight = (a, b) => b.weight - a.weight;
+const likelihoodBadge = (likelihood) => `<span class="lk-badge lk-${escapeHtml(likelihood.toLowerCase().replaceAll(" ", "-"))}">${escapeHtml(likelihood)}</span>`;
+
+function joinNames(names) {
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+function strengthWord(missingCount) {
+  return missingCount === 1 ? "half" : `${percent(Math.pow(0.5, missingCount))}%`;
+}
+
+/* Cards and their prerequisites */
+
+const KIND_LABEL = { process: "Program work", tool: "Tool" };
+const KIND_ORDER = { process: 0, tool: 1 };
+
+// Timeline chips only: the full card names wrap badly in a narrow quarter column. Cards, warnings and reports use the full name.
+const SHORT_LABEL = {
+  why: "Your why",
+  threat_assessment: "Threat assessment",
+  inventory: "App inventory",
+  partners: "Key partners",
+  operating_model: "Operating model",
+  champions: "Champions program",
+  training: "Secure coding training",
+  pipeline: "Pipeline map",
+  fix_slas: "Remediation & SLAs",
+  threat_model: "Threat modeling",
+  sca: "Dependency scanning",
+  sast: "Code scanning",
+  secrets: "Secrets vault",
+  mfa: "MFA & logins",
+  kpis: "KPIs",
+  metrics_review: "Metrics review",
+  pentest: "Pen test & bounty",
+  detection: "Detection & response"
+};
+const shortName = (item) => SHORT_LABEL[item.id] || item.name;
+const nameOf = (id) => byId[id].name;
+
+// The cards that list this one in their own needs: what building it unlocks.
+const unlocksOf = (id) => initiatives.filter((item) => (item.needs || []).includes(id));
+
+// Why one prerequisite isn't in place for a card built in `quarter`: not in the plan,
+// built after the card, or built in time but missing its own prerequisite (the recursive rule).
+function prereqProblem(plan, needId, quarter) {
+  const name = nameOf(needId);
+  if (plan[needId] === undefined) return `${name} isn't in your plan`;
+  if (plan[needId] > quarter) return `${name} isn't built until ${quarterName(plan[needId])}`;
+  const own = missingFoundations(plan, needId).map(nameOf);
+  return own.length ? `${name} is missing its own prerequisite (${joinNames(own)})` : `${name} isn't in place`;
+}
+
+// One clause per missing prerequisite, joined with semicolons because a clause can hold "and".
+const prereqProblems = (plan, id) => missingFoundations(plan, id).map((needId) => prereqProblem(plan, needId, plan[id])).join("; ");
+
+/* Anonymous activity telemetry (js/tracker.js). The three ids match the portal's counts;
+   recordActivity dedupes each track/id/event per session, so repeat calls are harmless. */
+
+const track = (id, event) => recordActivity("commander", id, event);
+
+/* Shared chrome */
+
+function navTemplate() {
+  const canGoBack = state.screen > SCREEN.stat && state.screen < SCREEN.finish;
+  const back = canGoBack ? `<button class="back-link path-back" type="button" data-action="back" data-key="back">← Back</button>` : "<span></span>";
+  const dots = STEPS.map((label, index) => `<i class="progress-dot${index === state.screen ? " active" : ""}${index < state.screen ? " complete" : ""}" title="${escapeHtml(label)}"></i>`).join("");
+  return `<nav class="mission-nav path-nav" aria-label="Path progress">${back}<div class="progress-dots" role="img" aria-label="Step ${state.screen + 1} of ${STEPS.length}: ${escapeHtml(STEPS[state.screen])}">${dots}</div></nav>`;
+}
+
+// Screens 3 and 4 share the live Mission 02 shell and its Resource Gauntlet art.
+function stageShell(header, content) {
+  return `<div class="mission-stage mission-stage-simulator"><section class="mission-shell">${navTemplate()}<header class="mission-header"><div>${header}</div><span class="classification">Commander clearance</span></header>${content}</section></div>`;
+}
+
+/* Screen 1: the four components */
+
+function briefingScreen() {
+  const cards = components.map((component) => {
+    const open = state.expanded.has(component.id);
+    const hint = open ? "Tap to close" : state.seen.has(component.id) ? "Opened · tap to reread" : "Tap to open";
+    return `<button class="component-card accent-${escapeHtml(component.id)}${open ? " open" : ""}${state.seen.has(component.id) ? " seen" : ""}" type="button" data-action="open" data-id="${escapeHtml(component.id)}" data-key="open-${escapeHtml(component.id)}" aria-expanded="${open}">
+      <span class="component-number">${escapeHtml(component.number)}</span>
+      <span class="component-title">${escapeHtml(component.title)}</span>
+      <span class="component-line">${escapeHtml(component.line)}</span>
+      ${open ? `<span class="component-detail">${escapeHtml(component.detail)}</span>` : ""}
+      <span class="component-hint">${hint}</span>
+    </button>`;
   }).join("");
-  const allComplete = state.complete.length === missionIds.length;
-  return `<section class="hero"><div class="hero-copy">
-    <p class="eyebrow">${academyConfig.event} // ${academyConfig.program}</p>
-    <h1>Take <span>command.</span></h1>
-    <p class="lede">Many AppSec programs follow a common pattern: they're built from the same four parts. Learn them here, fund a roadmap on a tight budget, and see whether it holds up through five incidents. Afterward, take home a ranked roadmap for your own organization.</p>
-    <a class="button" href="${allComplete ? "#/complete" : "#curriculum"}">${allComplete ? "View qualification →" : "View training missions →"}</a>
-    <div class="mission-brief"><span><strong>3</strong><br>Missions</span><span><strong>≈20</strong><br>Minutes</span><span><strong>${state.complete.length}/3</strong><br>Complete</span></div>
-  </div></section>
-  <section class="curriculum" id="curriculum"><div class="section-heading"><div><p class="eyebrow">Academy curriculum</p><h2>Build the program,<br>not the tool pile.</h2></div><div class="curriculum-intro"><p>No budget authority required. If you'll ever ask for security funding, or approve it, this is for you.</p><img src="${academyConfig.assets.recruitmentPoster}" alt="AppSec Needs You recruitment poster featuring the AppSec cadet figure"></div></div><div class="mission-grid">${cards}</div></section>
-  <section class="academy-ranks" aria-labelledby="academy-ranks-title"><div class="ranks-copy"><p class="eyebrow">Your academy path</p><h2 id="academy-ranks-title">Lead the mission.<br>Earn command.</h2><p>Commanders are the IT and security leaders who set direction: what the program protects, how it scales, and how it proves progress.</p></div><img src="${academyConfig.assets.rankPoster}" alt="AppSec Academy ranks: Cadets for beginners, Navigators for programmers, Communication Officers for AppSec professionals, and Commanders for IT and security leadership"></section>`;
+  const ready = state.seen.size === components.length;
+  return `<div class="path-nav-wrap">${navTemplate()}</div>
+    <section class="path-header"><p class="eyebrow">Phase 2 · Briefing</p><h1>Four parts <span>of a program</span></h1><p class="lede">One practical way to organize an AppSec program. Open all four before you build your roadmap.</p></section>
+    <section class="path-section">
+      <div class="component-grid">${cards}</div>
+      <p class="path-note">Every initiative on your roadmap sits under one of these four parts.</p>
+      <div class="path-actions"><span class="path-count">${state.seen.size} of ${components.length} opened</span><button class="button" type="button" data-action="go" data-to="${SCREEN.build}" data-key="continue"${ready ? "" : " disabled"}>Continue →</button></div>
+    </section>`;
 }
 
-function shell(id, content) {
-  const item = missionMeta[id];
-  return `<div class="mission-stage mission-stage-${id}"><section class="mission-shell"><nav class="mission-nav"><a class="back-link" href="#/">← Academy deck</a><div class="progress-dots" aria-label="Mission progress">${missionIds.map((mid) => `<i class="progress-dot ${mid === id ? "active" : ""} ${isComplete(mid) ? "complete" : ""}"></i>`).join("")}</div></nav>
-    <header class="mission-header"><div><p class="eyebrow">Mission ${item.number} // ${item.skill}</p><h1>${item.title}</h1><div class="mission-objective"><span>Objective</span><p>${item.objective}</p></div></div><span class="classification">Commander clearance</span></header>${content}</section></div>`;
-}
+/* Screen 1: why it matters. Two verified DBIR figures, each worded to match what its chart measures. */
 
-function consoleBox(title, bodyId) {
-  return `<section class="console"><div class="console-bar"><span>${title}</span><span class="console-lights"><i></i><i></i><i></i></span></div><div class="console-body" id="${bodyId}"></div></section>`;
-}
-
-function continueLinks(id) {
-  const next = missionIds[missionIds.indexOf(id) + 1];
-  return `<a class="button" href="${next ? `#/mission/${next}` : "#/complete"}">${next ? `Continue to mission ${missionMeta[next].number} →` : "Complete Commander qualification →"}</a><a class="button secondary" href="#/">Return to academy deck</a>`;
-}
-
-function completeMission(id) {
-  if (!isComplete(id)) state.complete = missionIds.filter((mid) => mid === id || state.complete.includes(mid));
-  recordActivity("commander", id, "completed");
-  saveState();
-  notify(`Mission ${missionMeta[id].number} secured.`);
-  const feedback = document.querySelector("#feedback");
-  feedback.className = "feedback good mission-secured";
-  feedback.innerHTML = `<strong>Mission secured.</strong><br>${missionMeta[id].takeaway}<br><small>Your verified result will remain on screen until you choose to continue.</small>`;
-  document.querySelector(".repair-panel .actions").innerHTML = continueLinks(id);
-  document.querySelectorAll(".repair-panel input").forEach((control) => { control.disabled = true; });
-}
-
-/* Mission 01: The Command Protocols */
-
-function protocolUnlocked(index) {
-  const firstOpen = protocols.findIndex((protocol) => !state.protocols.includes(protocol.id));
-  return firstOpen === -1 || index <= firstOpen;
-}
-
-function detailTemplate(command) {
-  const blocks = descriptionBlocks(command.desc).map((block) => {
-    if (block.type === "list") return `<ul>${block.items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
-    return `<p class="${block.type}">${escapeHtml(block.text)}</p>`;
-  }).join("");
-  const table = command.table ? `<div class="table-wrap"><table class="sla-table"><thead><tr>${command.table.headers.map((header) => `<th scope="col">${escapeHtml(header)}</th>`).join("")}</tr></thead><tbody>${command.table.rows.map((row) => `<tr>${row.map((cell, index) => index === 0 ? `<th scope="row">${escapeHtml(cell)}</th>` : `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table></div><p class="table-caption">${escapeHtml(command.table.caption)}</p>` : "";
-  return blocks + table;
-}
-
-function commandTemplate(protocol, command, index) {
-  const key = `${protocol.id}-${index}`;
-  const status = lab.pending === key ? "pending" : lab.initiated.has(key) ? "active" : "standby";
-  const label = { pending: "Initiating…", active: "Active", standby: "Standby" }[status];
-  const glyph = { pending: '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>', active: "✓", standby: "›" }[status];
-  const expanded = status === "active" && lab.expanded === key;
-  return `<div class="command"><button type="button" class="command-row ${status}${expanded ? " expanded" : ""}" data-command="${key}" aria-expanded="${expanded}"><span class="command-glyph">${glyph}</span><span class="command-name">${escapeHtml(command.name)}</span><span class="command-status">${label}</span></button>${expanded ? `<div class="command-detail">${detailTemplate(command)}</div>` : ""}</div>`;
-}
-
-function paintProtocolConsole() {
-  const body = document.querySelector("#protocol-console");
-  const protocol = findProtocol(lab.active);
-  const readiness = Math.round((lab.initiated.size / totalCommands) * 100);
-  const tabs = protocols.map((item, index) => {
-    const passed = state.protocols.includes(item.id);
-    return `<button type="button" role="tab" class="protocol-tab${item.id === lab.active ? " active" : ""}${passed ? " passed" : ""}" data-protocol="${item.id}" aria-selected="${item.id === lab.active}" ${protocolUnlocked(index) ? "" : "disabled"}><b>${item.number}</b>${item.title}${passed ? " ✓" : ""}</button>`;
-  }).join("");
-  body.innerHTML = `<div class="readiness"><div class="readiness-head"><span>Mission readiness</span><strong>${readiness}%</strong></div><div class="meter${readiness === 100 ? " full" : ""}"><i data-meter="${readiness}"></i></div><small>${lab.initiated.size}/${totalCommands} commands initiated</small></div>
-    <div class="protocol-tabs" role="tablist" aria-label="Program protocols">${tabs}</div>
-    <div class="protocol-heading"><span class="protocol-number">${protocol.number}</span><div><h2>${escapeHtml(protocol.title)}</h2><p>${escapeHtml(protocol.subtitle)}</p><p class="protocol-intro">${escapeHtml(protocol.intro)}</p></div></div>
-    <div class="command-list">${protocol.commands.map((command, index) => commandTemplate(protocol, command, index)).join("")}</div>`;
-  paintMeters(body);
-}
-
-function paintCheckpoint() {
-  const panel = document.querySelector("#checkpoint-panel");
-  const protocol = findProtocol(lab.active);
-  const { checkpoint } = protocol;
-  const passed = state.protocols.includes(protocol.id);
-  const index = protocols.indexOf(protocol);
-  const next = protocols[index + 1];
-  const nextAction = next
-    ? `<button class="button" type="button" data-goto="${next.id}">Next protocol: ${next.title} →</button>`
-    : isComplete("protocols") ? continueLinks("protocols") : "";
-  const choices = passed ? checkpoint.choices : shuffled(checkpoint.choices);
-  panel.innerHTML = `<span class="step-label">Checkpoint // Protocol ${protocol.number}</span><h2>${escapeHtml(checkpoint.question)}</h2><p>Initiate the commands in this protocol, then transmit the answer you would defend to leadership.</p>
-    <div class="patches">${choices.map((choice) => `<label class="patch"><input type="radio" name="checkpoint" value="${choice.id}"${passed && choice.id === checkpoint.correctId ? " checked" : ""}${passed ? " disabled" : ""}><span class="patch-content"><span class="patch-title">${escapeHtml(choice.label)}</span></span></label>`).join("")}</div>
-    <div class="feedback${passed ? " good" : ""}" id="feedback" role="status">${passed ? `<strong>Protocol secured.</strong><br>${escapeHtml(checkpoint.takeaway)}` : "Select an answer, then transmit it."}</div>
-    <div class="actions">${passed ? nextAction : '<button class="button" id="transmit" type="button">Transmit answer</button>'}</div>`;
-}
-
-function protocolsMission() {
-  return shell("protocols", `<div class="workspace">${consoleBox("Command console // program protocols", "protocol-console")}<aside class="repair-panel" id="checkpoint-panel"></aside></div>`);
-}
-
-function bindProtocols() {
-  const firstOpen = protocols.find((protocol) => !state.protocols.includes(protocol.id));
-  lab = { active: (firstOpen || protocols[0]).id, initiated: new Set(), expanded: null, pending: null };
-  const session = lab;
-  paintProtocolConsole();
-  paintCheckpoint();
-
-  document.querySelector("#protocol-console").addEventListener("click", async (event) => {
-    const tab = event.target.closest("[data-protocol]");
-    if (tab) {
-      if (tab.disabled || lab.pending) return;
-      lab.active = tab.dataset.protocol;
-      lab.expanded = null;
-      paintProtocolConsole();
-      paintCheckpoint();
-      return;
-    }
-    const row = event.target.closest("[data-command]");
-    if (!row || lab.pending) return;
-    const key = row.dataset.command;
-    if (lab.initiated.has(key)) {
-      lab.expanded = lab.expanded === key ? null : key;
-      paintProtocolConsole();
-      document.querySelector(`[data-command="${key}"]`)?.focus();
-      return;
-    }
-    lab.pending = key;
-    paintProtocolConsole();
-    await wait(academyConfig.timing.initiateMs);
-    if (lab !== session) return;
-    lab.initiated.add(key);
-    lab.pending = null;
-    lab.expanded = key;
-    paintProtocolConsole();
-    document.querySelector(`[data-command="${key}"]`)?.focus();
-  });
-
-  document.querySelector("#checkpoint-panel").addEventListener("click", (event) => {
-    const goto = event.target.closest("[data-goto]");
-    if (goto) {
-      lab.active = goto.dataset.goto;
-      lab.expanded = null;
-      paintProtocolConsole();
-      paintCheckpoint();
-      document.querySelector(".workspace").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
-      return;
-    }
-    if (!event.target.closest("#transmit")) return;
-    const feedback = document.querySelector("#feedback");
-    const selected = document.querySelector('input[name="checkpoint"]:checked');
-    if (!selected) {
-      feedback.className = "feedback bad";
-      feedback.textContent = "Select an answer first.";
-      return;
-    }
-    const result = checkAnswer(lab.active, selected.value);
-    if (!result.correct) {
-      feedback.className = "feedback bad";
-      feedback.innerHTML = `<strong>Checkpoint failed.</strong><br>${escapeHtml(result.hint)}<br><small>Re-read the protocol, choose again, and transmit.</small>`;
-      return;
-    }
-    if (!state.protocols.includes(lab.active)) state.protocols = protocols.map((protocol) => protocol.id).filter((id) => id === lab.active || state.protocols.includes(id));
-    saveState();
-    paintProtocolConsole();
-    paintCheckpoint();
-    if (state.protocols.length === protocols.length && !isComplete("protocols")) completeMission("protocols");
-    else notify(`Protocol ${findProtocol(lab.active).number} secured.`);
-  });
-}
-
-/* Mission 02: The Resource Gauntlet */
-
-function activeScenario() { return findScenario(state.sim.scenarioId); }
-const percentOf = (part, whole) => (whole > 0 ? (part / whole) * 100 : 0);
-// Register totals move in small steps, so show them with one more digit than formatImpact.
-const formatLoss = (amountK) => (amountK >= 1000 ? `$${(amountK / 1000).toFixed(2)}M` : formatImpact(amountK));
-const optionName = (scenario, id) => `${postureOf(scenario, id) === "partial" ? "Upgrade " : ""}${findInitiative(id).short}`;
-// Starts are offsets from the beginning of the timeline; on screen everything is a calendar month, 1..N.
-const startPhrase = (start) => `month ${start + 1}`;
-// The first calendar month a control is at full strength, given that the score samples each month at its midpoint.
-const fullMonthOf = (fullBy) => Math.ceil(fullBy - 0.5) + 1;
-const formatWeeks = (weeks) => String(Math.round(weeks * 10) / 10);
-const phaseName = (phase, index) => `Phase ${index + 1} (months ${phase.start + 1}–${phase.end})`;
-// Engineer-weeks as full-time people over the timeline (52.143 weeks a year).
-const peopleOf = (scenario) => (scenario.engineerWeeks / ((scenario.months * 52.143) / 12)).toFixed(1);
-const lowerFirst = (text) => text.charAt(0).toLowerCase() + text.slice(1);
-const listJoin = (items) => (items.length < 2 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`);
-
-function simulatorMission() {
-  return shell("simulator", `<div class="workspace" id="sim-workspace">${consoleBox("Roadmap simulator // assess · fund · survive", "sim-console")}<aside class="repair-panel" id="sim-panel"></aside></div>`);
-}
-
-function briefingTemplate() {
-  const cards = scenarios.map((scenario) => `<button type="button" class="scenario-card" data-scenario="${scenario.id}"><span class="skill-tag">${escapeHtml(scenario.tagline)}</span><h3>${escapeHtml(scenario.name)}</h3><p>${escapeHtml(scenario.description)}</p><span class="posture-story"><b>Today:</b> ${escapeHtml(scenario.postureStory)}</span><span class="stat-row"><span>Timeline <b>${scenario.months} months</b></span><span>Budget <b>$${scenario.budget}K</b></span><span>Team time <b>${scenario.engineerWeeks} eng-weeks</b> (≈${peopleOf(scenario)} people full-time)</span></span><span class="staffing">${escapeHtml(scenario.staffing)}</span></button>`).join("");
-  return {
-    console: `<div class="briefing"><strong>Assignment:</strong> Choose a company, assess what it already runs, and fund a roadmap against its risk register, then live through one possible timeline of incidents.</div><div class="scenario-grid">${cards}</div>`,
-    panel: `<span class="step-label">Commander's brief</span><h2>You cannot fund everything.</h2><p>Each company is its own scenario, with a risk register of ${incidents.length} threats. A threat's likelihood times its impact is its expected loss.</p><p class="definition">${escapeHtml(likelihoodDefinition)}</p><p>Every company already runs some controls, some of them only partly. Fund new controls, upgrade partial ones, and mind the foundations: a scanner with nobody to fix its findings delivers a fraction of what it promises.</p><p>Controls take time. Each one ramps up over months after it starts, and engineer-weeks are budgeted by phase, so you can't start everything at once. Your score is the share of the company's inherent expected loss that its controls remove, what already runs plus what you fund: half for the loss avoided during the timeline, half for the risk you hand over at the end.</p><div class="protocol-list"><span>Read the risk drivers and the starting posture</span><span>Fund or upgrade controls, and choose when each one starts</span><span>Remove at least ${passingReadiness}% of the register's expected loss</span></div>${scopeTemplate()}<div class="feedback" id="feedback">Choose a company to begin.</div><div class="actions"></div>`
-  };
-}
-
-// Where this mission fits: the application and platform slice of a company's risk, against how breaches start.
-function scopeTemplate() {
-  const routes = breachRoutes.routes.map((route) => `<li class="route ${route.scope}"><span class="route-head"><b>${escapeHtml(route.label)}</b><strong>${route.share}%</strong></span><span class="route-bar" aria-hidden="true"><i data-meter="${route.share}"></i></span><small><em class="scope-tag ${route.scope}">${route.scope === "part" ? "Partly this mission" : "Another program"}</em> ${escapeHtml(route.note)}</small></li>`).join("");
-  const shown = breachRoutes.routes.reduce((sum, route) => sum + route.share, 0);
-  return `<section class="scope"><span class="step-label">Where this mission fits</span><p class="scope-lede">You're the <b>AppSec lead</b>. This mission is the application and platform slice of a company's risk. Your peers run identity, email and people, endpoint and edge, and third-party risk.</p><p class="scope-source">How attackers first got in, ${escapeHtml(breachRoutes.source)} (${escapeHtml(breachRoutes.population)}):</p><ol class="routes">${routes}</ol><p class="scope-source">The four routes above cover ${shown}% of breaches; the rest are other or unknown routes. Across all breaches, a third party was involved in ${breachRoutes.thirdParty}% and ransomware in ${breachRoutes.ransomware}%. Most of that sits outside this mission.</p><p class="scope-why"><b>Why play it anyway:</b> the app slice is where your engineering budget goes, and the same trade-offs apply to every program: foundations first, start the slow controls early, fund what cuts the most loss.</p></section>`;
-}
-
-function mitigationSummary(initiative) {
-  const parts = Object.entries(initiative.mitigates).map(([category, share]) => `${formatCoverage(category)} ${formatPercent(share)}`);
-  if (initiative.containsAll) parts.push(`every other incident ${formatPercent(initiative.containsAll)} via containment`);
-  return parts.join(" · ");
-}
-
-const missingText = (missing) => missing.map((item) => `${item.initiative.short} (−${formatPercent(item.penalty)})`).join(", ");
-
-// "By month 6: cuts loss from injection by 35% (of 70%). Missing: Vulnerability Management (−50%)." is the lesson on every card.
-function deliveryLine(status) {
-  const { initiative, level, scenario } = status;
-  if (initiative.foundation) {
-    const penalty = penalties[initiative.id];
-    const supported = listJoin(supportedBy(initiative.id).map((item) => item.short));
-    return `<span class="delivery">Supports ${escapeHtml(supported)}. Without it, each delivers ${formatPercent(penalty)} less${level === 0.5 ? ` (${formatPercent(penalty / 2)} less while it's only partial)` : ""}.</span>`;
+const STATS = [
+  {
+    figure: "34",
+    year: "DBIR 2025",
+    headline: "Web applications were the most common route in breaches.",
+    body: "In 34% of breaches where the route was known, it ran through a web application.",
+    source: "Verizon 2025 Data Breach Investigations Report, p.28, Figure 28, top action vectors in breaches (n=7,372).",
+    note: "In basic web application attacks, about 88% of breaches involved stolen credentials (same report, p.53), so logins count as much as code."
+  },
+  {
+    figure: "31",
+    year: "DBIR 2026",
+    headline: "Exploiting a vulnerability is now the most common way attackers first get in.",
+    body: "It was how 31% of breaches started, up from 20% the year before.",
+    source: "Verizon 2026 Data Breach Investigations Report, p.15, Figure 10, initial access vectors in non-Error, non-Misuse breaches (n=20,023).",
+    note: "That counts every kind of vulnerability, including VPNs and other edge devices, not only your own apps."
   }
-  const threat = escapeHtml(formatCoverage(status.category));
-  const missing = status.missing.length ? ` Missing: ${escapeHtml(missingText(status.missing))}.` : "";
-  const ramping = status.funded && level > 0 && level < 1 ? ` Still ramping (${formatPercent(level)}).` : "";
-  const newCodeOnly = shippedFactor(scenario, initiative, status.category) < 1
-    ? ` Protects new code only: about ${formatPercent(scenario.newCodeShare)} of ${escapeHtml(scenario.name)}'s exposure is in code written during the ${scenario.months} months (an estimate).`
-    : "";
-  // "(of 70%)" only when the control falls short of its rating once rounded.
-  const cut = (share) => `${formatPercent(share)}${formatPercent(share) === formatPercent(status.rated) ? "" : ` (of a possible ${formatPercent(status.rated)})`}`;
-  const lead = level === 0
-    ? `If funded now: would cut loss from ${threat} by ${cut(status.rated * status.factor * shippedFactor(scenario, initiative, status.category))} once fully ramped.`
-    : `${status.posture === "partial" && !status.funded ? "As is (partial), by" : "By"} month ${scenario.months}: cuts loss from ${threat} by ${cut(status.delivered)}.`;
-  return `<span class="delivery${status.missing.length ? " short" : ""}">${lead}${missing}${ramping}${newCodeOnly}</span>`;
+];
+
+function statScreen() {
+  const cards = STATS.map((stat) => `<article class="stat-card">
+      <div class="stat-figure" aria-hidden="true">${escapeHtml(stat.figure)}<span>%</span></div>
+      <div class="stat-copy">
+        <p class="stat-year">${escapeHtml(stat.year)}</p>
+        <h2>${escapeHtml(stat.headline)}</h2>
+        <p class="stat-body">${escapeHtml(stat.body)}</p>
+        <p class="stat-secondary">${escapeHtml(stat.note)}</p>
+        <p class="stat-source">${escapeHtml(stat.source)}</p>
+      </div>
+    </article>`).join("");
+  return `<div class="path-nav-wrap">${navTemplate()}</div>
+    <section class="hero hero-short"><div class="hero-copy"><p class="eyebrow">Phase 1 · Intel</p><h1>Why AppSec <span>matters</span></h1><p class="lede">Attackers go where the software is. Two numbers from this year's and last year's Verizon breach reports.</p></div></section>
+    <section class="path-section stat-section">
+      <div class="stat-grid">${cards}</div>
+      <div class="path-actions"><button class="button" type="button" data-action="go" data-to="${SCREEN.briefing}" data-key="continue">Continue →</button></div>
+    </section>`;
 }
 
-// How long the control takes to pay off, and where it will be by the end of the timeline. A control counts as
-// fully ramped only if it is at 100% in the last month, as the score samples it. "Ramped", not "full strength":
-// a fully ramped control still delivers less without its foundations.
-function rampLine(scenario, status) {
-  if (status.posture === "in") return "";
-  const ramp = status.initiative.rampMonths * (status.posture === "partial" ? 0.5 : 1);
-  const starts = `${status.posture === "partial" ? "Upgrade starts" : "Starts"} ${startPhrase(status.start)}`;
-  const text = !status.funded
-    ? `Ramps up over ${formatWeeks(ramp)} ${ramp === 1 ? "month" : "months"}${status.posture === "partial" ? " from 50%" : ""}.`
-    : status.level >= 1
-      ? `${starts} · fully ramped ${fullMonthOf(status.fullBy) === status.start + 1 ? "in" : "from"} month ${fullMonthOf(status.fullBy)}.`
-      : `${starts} · ${formatPercent(status.level)} ramped when the timeline ends.`;
-  return `<span class="ramp">${text}</span>`;
-}
+/* Screen 3: build the roadmap */
 
-function startPicker(scenario, id, start) {
-  const options = startsFor(scenario).map((month) => {
-    const allowed = month === start || canPlace(scenario, state.sim, id, month);
-    return `<label><input type="radio" name="start-${id}" value="${month}" data-start-for="${id}"${month === start ? " checked" : ""}${allowed ? "" : " disabled"}><span>${month + 1}</span></label>`;
+function resourceBar(used) {
+  const left = resources.budgetK - used.budgetK;
+  const quarters = resources.fte.map((cap, index) => {
+    const full = used.fte[index] >= cap - 1e-9;
+    return `<div class="resource res-q"><div class="resource-head"><span>${escapeHtml(quarterName(index))}</span><strong>${fteLabel(used.fte[index])}/${fteLabel(cap)}</strong></div><div class="meter${full ? " capped" : ""}"><i data-meter="${percentOf(used.fte[index], cap)}"></i></div></div>`;
   }).join("");
-  return `<fieldset class="start-phase"><legend>Start in month (1 = now)</legend><div class="segmented">${options}</div></fieldset>`;
+  return `<div class="res-bar" role="region" aria-label="Resources">
+    <div class="resource res-budget"><div class="resource-head"><span>Budget left</span><strong>$${left}K / $${resources.budgetK}K</strong></div><div class="meter${left <= 0 ? " capped" : ""}"><i data-meter="${percentOf(left, resources.budgetK)}"></i></div></div>
+    <div class="res-team"><span class="res-label">Team per quarter · FTE used / cap</span><div class="res-fte">${quarters}</div></div>
+    <button class="button" type="button" data-action="run" data-key="run-bar"${Object.keys(state.plan).length ? "" : " disabled"}>Run end-of-year attack simulation</button>
+  </div>`;
 }
 
-// Why a control can't be funded at any start: the budget, the engineer-weeks, or no start where both fit.
-function lockReason(scenario, id) {
-  const withControl = (start) => ({ activated: [...state.sim.activated, id], starts: { ...state.sim.starts, [id]: start } });
-  const starts = startsFor(scenario);
-  if (!starts.some((start) => totals(scenario, withControl(start)).budget <= scenario.budget)) return "not enough budget left";
-  if (!starts.some((start) => withinResources({ ...scenario, budget: Infinity }, withControl(start)))) return "not enough eng-weeks left in any phase";
-  return "budget and eng-weeks don't fit at one start";
-}
-
-function controlCard(scenario, initiative) {
-  const status = { ...controlStatus(scenario, state.sim, initiative.id), scenario };
-  const badges = [
-    initiative.foundation ? '<span class="badge foundation">Foundation</span>' : "",
-    status.posture === "in" ? '<span class="badge in-place">In place</span>' : "",
-    status.posture === "partial" ? `<span class="badge partial">${status.funded ? "Upgrading to full" : "Partial"}</span>` : ""
-  ].filter(Boolean).join("");
-  const body = `${badges ? `<span class="card-badges">${badges}</span>` : ""}<span class="patch-title">${escapeHtml(initiative.name)}</span>${status.note ? `<span class="posture-note">Today: ${escapeHtml(status.note)}</span>` : ""}<span class="initiative-desc">${escapeHtml(initiative.description)}</span>${initiative.foundation ? "" : `<span class="mitigates"><b>Cuts loss from:</b> ${escapeHtml(mitigationSummary(initiative))} (fully ramped, with its foundations)</span>`}${deliveryLine(status)}${rampLine(scenario, status)}`;
-  if (status.posture === "in") return `<div class="patch initiative in-place"><span class="patch-content running">${body}<span class="cost">Running · no cost to your budget</span></span></div>`;
-  const earliest = status.funded ? status.start : earliestStart(scenario, state.sim, initiative.id);
-  const available = earliest !== null;
-  const cost = optionCost(scenario, initiative.id, earliest ?? 0);
-  const when = status.funded ? `, starting ${startPhrase(status.start)}` : earliest > 0 ? ` · fits from ${startPhrase(earliest)}` : "";
-  const dollars = cost.budget > 0 ? `$${cost.budget}K` : "$0 (team time only)";
-  const price = `${dollars} · ${formatWeeks(cost.weeks)} eng-weeks${available ? when : ` · Doesn't fit: ${lockReason(scenario, initiative.id)}`}`;
-  return `<div class="initiative-card${status.funded ? " funded" : ""}"><label class="patch initiative${status.posture === "partial" ? " partial" : ""}"><input type="checkbox" name="initiative" value="${initiative.id}"${status.funded ? " checked" : ""}${available ? "" : " disabled"}><span class="patch-content">${body}<span class="cost">${status.posture === "partial" ? "Upgrade to full · " : ""}${price}</span></span></label>${status.funded ? startPicker(scenario, initiative.id, status.start) : ""}</div>`;
-}
-
-function groupTemplate(scenario, group) {
-  const members = initiatives.filter((initiative) => initiative.group === group.id);
-  const running = members.filter((initiative) => postureOf(scenario, initiative.id)).length;
-  const selected = members.filter((initiative) => state.sim.activated.includes(initiative.id)).length;
-  return `<details class="control-group" data-group="${group.id}"${lab.closedGroups.has(group.id) ? "" : " open"}><summary><span class="group-name">${escapeHtml(group.name)}</span><span class="group-meta">${escapeHtml(group.summary)} · ${members.length} controls · ${running} running today · ${selected} in your roadmap</span></summary><div class="initiative-grid">${members.map((initiative) => controlCard(scenario, initiative)).join("")}</div></details>`;
-}
-
-function lossTiles(loss) {
-  return `<div class="loss-tiles"><span><small>Inherent (no controls)</small><strong>${formatLoss(loss.inherent)}</strong></span><span><small>Residual today</small><strong>${formatLoss(loss.current)}</strong></span><span><small>Residual with your roadmap</small><strong>${formatLoss(loss.target)}</strong></span></div>`;
-}
-
-// A details element that stays open across repaints once the attendee opens it.
-const keptOpen = (key) => `data-keep="${key}"${lab.openDetails.has(key) ? " open" : ""}`;
-
-// Every control that directly cuts this threat, and where it stands: running or funded, partial, or not funded.
-function cutByTemplate(scenario, roadmap, category) {
-  const chips = helpfulInitiatives(category).filter((item) => item.direct).map(({ initiative }) => {
-    const posture = postureOf(scenario, initiative.id);
-    const on = posture === "in" || roadmap.activated.includes(initiative.id);
-    const [state, mark, label] = on ? ["on", " ✓", posture === "in" ? "running" : "in your roadmap"] : posture === "partial" ? ["half", " ½", "partial today"] : ["off", "", "not funded"];
-    return `<span class="chip ${state}" title="${escapeHtml(initiative.short)}: ${label}">${escapeHtml(initiative.short)}${mark}<span class="sr-only"> (${label})</span></span>`;
-  });
-  return chips.length ? `<span class="cutby"><b>Cut by:</b> ${chips.join("")}</span>` : "";
-}
-
-// The unfunded control that would cut this threat most, as it would actually deliver with the roadmap's foundations
-// (and the new-code cap), preferring one that still fits the remaining budget and engineer-weeks.
-function leverTemplate(scenario, roadmap, category) {
-  const levels = levelsAt(scenario, roadmap, scenario.months - 1);
-  const options = helpfulInitiatives(category)
-    .filter((item) => item.direct && postureOf(scenario, item.initiative.id) !== "in" && !roadmap.activated.includes(item.initiative.id))
-    .map(({ initiative }) => ({ initiative, start: earliestStart(scenario, roadmap, initiative.id), missing: missingFoundations(initiative, levels), share: effectivenessOf(initiative, category) * foundationFactor(initiative, levels) * shippedFactor(scenario, initiative, category) }))
-    .sort((x, y) => y.share - x.share);
-  const fitting = options.filter((item) => item.start !== null);
-  const best = fitting[0] || options[0];
-  if (!best) return "";
-  const verb = postureOf(scenario, best.initiative.id) === "partial" ? "Upgrade" : "Fund";
-  const missing = best.missing.length ? `; missing ${escapeHtml(listJoin(best.missing.map((item) => item.initiative.short)))}` : "";
-  const when = best.start === null ? "doesn't fit your remaining budget and engineer-weeks" : `fits from ${startPhrase(best.start)}`;
-  const blocked = fitting.length && options[0] !== best ? ` (${escapeHtml(options[0].initiative.short)}, up to ${formatPercent(options[0].share)}, no longer fits)` : "";
-  return `<span class="lever"><b>${best.start === null ? "Biggest lever" : "Biggest lever that fits"}:</b> ${verb} ${escapeHtml(best.initiative.short)} (cuts up to ${formatPercent(best.share)}${missing}) · ${when}${blocked}</span>`;
-}
-
-// The register, biggest gap first: what's left of each threat, what cuts it, and the math behind it on request.
-function registerTemplate(scenario, roadmap) {
-  const register = [...registerFor(scenario, roadmap)].sort((x, y) => (y.target - x.target) || (y.inherent - x.inherent));
-  const loss = expectedLoss(register);
-  const largest = Math.max(...register.map((row) => row.inherent));
-  const rows = register.map((row, index) => {
-    const category = row.incident.coverageNeeded;
-    const math = `<details class="row-math" ${keptOpen(`math-${row.incident.id}`)}><summary>The math</summary><p>Likelihood ${formatPercent(row.likelihood)} in ${scenario.months} months × impact ${formatImpact(row.impact)} = <b>${formatImpact(row.inherent)}</b> with no controls. ${formatImpact(row.current)} with what ${escapeHtml(scenario.name)} runs today. <b>${formatImpact(row.target)}</b> with your roadmap (${formatImpact(row.during)} averaged over the ${scenario.months} months, ${formatImpact(row.handover)} at handover, weighed equally).</p></details>`;
-    return `<li class="register-row"><span class="register-head"><span>${escapeHtml(row.incident.title)} ${categoryChip(row.incident.id)}</span><b>${formatImpact(row.target)} left</b></span><small>of ${formatImpact(row.inherent)} · ${formatPercent(1 - row.target / row.inherent)} cut</small><span class="register-bar" aria-hidden="true"><i class="inherent" data-meter="${percentOf(row.inherent, largest)}"></i><i class="current" data-meter="${percentOf(row.current, largest)}"></i><i class="target" data-meter="${percentOf(row.target, largest)}"></i></span>${cutByTemplate(scenario, roadmap, category)}${index === 0 ? leverTemplate(scenario, roadmap, category) : ""}${math}</li>`;
+function timelineTemplate(used) {
+  const columns = resources.quarters.map((name, quarter) => {
+    const builds = initiatives.filter((item) => state.plan[item.id] === quarter).map((item) => {
+      const missing = missingFoundations(state.plan, item.id);
+      const note = missing.length ? `<em>${strengthWord(missing.length)} strength: prerequisite not in place</em>` : "";
+      return `<li class="q-chip accent-${escapeHtml(item.component)}" title="${escapeHtml(item.name)}">${escapeHtml(shortName(item))}${note}</li>`;
+    }).join("");
+    return `<div class="q-col"><div class="q-head"><b>${escapeHtml(name)}</b><small>${fteLabel(used.fte[quarter])}/${fteLabel(resources.fte[quarter])} FTE</small></div>
+      <ul class="q-list">${builds || '<li class="q-empty">Nothing built yet</li>'}</ul></div>`;
   }).join("");
-  const how = `<details class="how" ${keptOpen("how")}><summary>How these numbers work</summary><p>${escapeHtml(likelihoodDefinition)}</p><p>Impact is what the incident costs ${escapeHtml(scenario.name)} if nothing stops it: response, fraud, notification, downtime. It scales with company size and sector.</p><p>Expected loss = likelihood × impact over the company's timeline. If you know ALE, this is the same idea${scenario.months === 12 ? "" : ` over ${scenario.months} months instead of a year`}.</p><p>"Left" weighs two things equally, as your score does: the average over the ${scenario.months} months, and the rate you hand over at the end. The rows add up to the Residual with your roadmap tile, give or take rounding.</p></details>`;
-  return `<span class="step-label">Risk register // expected loss</span>${lossTiles(loss)}${categoryStripTemplate(register, loss)}<p class="register-intro">Expected loss is the average cost of a threat (its chance of happening × its cost), not a forecast. <b>Shrink the orange.</b></p>${how}<p class="register-legend"><span><i class="key target"></i>Left with your roadmap</span><span><i class="key current"></i>Your roadmap removes</span><span><i class="key inherent"></i>Already mitigated today</span></p><p class="register-legend chip-key"><span><span class="chip on">✓</span>Running or funded</span><span><span class="chip half">½</span>Partial today</span><span><span class="chip off">Name</span>Not funded</span></p><ol class="register">${rows}</ol>`;
+  // All attacks land after Q4, heaviest first, so players can see what counts most.
+  const attacks = [...scenarios].sort(byWeight).map((scenario) => `<li class="incoming"><span class="threat-glyph" aria-hidden="true">▲</span><span><span class="incoming-title">${escapeHtml(scenario.title)}</span><span class="incoming-meta">${likelihoodBadge(scenario.likelihood)}<small>${weightLabel(scenario.weight)}</small></span></span></li>`).join("");
+  const endPanel = `<div class="q-col q-end"><div class="q-head"><b>End of year</b><small>Incoming</small></div><ul class="q-list">${attacks}</ul></div>`;
+  return `<section class="console year-console"><div class="console-bar"><span>Your year // builds, then the attacks</span><span class="console-lights"><i></i><i></i><i></i></span></div><div class="year">${columns}${endPanel}</div></section>`;
 }
 
-const categoryChip = (incidentId) => {
-  const category = categoryOf(incidentId);
-  return category ? `<em class="cat-chip cat-${category.id}">${escapeHtml(category.label)}</em>` : "";
+// Why a quarter button is disabled: budget blocks every quarter at once; team caps block one quarter.
+function blockReason(item, quarter, used) {
+  const without = { ...state.plan };
+  delete without[item.id];
+  const budgetLeft = resources.budgetK - spend(without).budgetK;
+  if (item.costK > budgetLeft) return `Over budget: costs $${item.costK}K, $${budgetLeft}K left`;
+  const busy = used.fte[quarter] - (state.plan[item.id] === quarter ? item.fte : 0);
+  return `Not enough team in ${quarterName(quarter)}: needs ${fteLabel(item.fte)} FTE, ${fteLabel(busy)} of ${fteLabel(resources.fte[quarter])} used`;
+}
+
+function initiativeCard(item, used) {
+  const placed = state.plan[item.id];
+  const isPlaced = placed !== undefined;
+  const blocked = [];
+  const buttons = resources.quarters.map((name, quarter) => {
+    const active = placed === quarter;
+    const allowed = active || fits(state.plan, item.id, quarter);
+    if (!allowed) blocked.push({ quarter, reason: blockReason(item, quarter, used) });
+    const title = active ? `Remove from ${name}` : allowed ? `Build in ${name}` : blockReason(item, quarter, used);
+    return `<button class="q-btn${active ? " active" : ""}" type="button" data-action="place" data-id="${escapeHtml(item.id)}" data-q="${quarter}" data-key="q-${escapeHtml(item.id)}-${quarter}" aria-pressed="${active}" title="${escapeHtml(title)}"${allowed ? "" : " disabled"}>${escapeHtml(name)}</button>`;
+  }).join("");
+  let reason = "";
+  if (blocked.length) {
+    const overBudget = blocked.find((entry) => entry.reason.startsWith("Over budget"));
+    reason = overBudget ? overBudget.reason : `Not enough team in ${joinNames(blocked.map((entry) => quarterName(entry.quarter)))} (needs ${fteLabel(item.fte)} FTE)`;
+  }
+  const needs = (item.needs || []).map(nameOf);
+  const unlocks = item.foundation ? unlocksOf(item.id).map((entry) => entry.name) : [];
+  const missing = isPlaced ? missingFoundations(state.plan, item.id) : [];
+  const warn = missing.length ? `<p class="init-warn">Runs at ${strengthWord(missing.length)} strength: ${escapeHtml(prereqProblems(state.plan, item.id))}.</p>` : "";
+  const kind = KIND_LABEL[item.kind] ? `<span class="badge kind kind-${escapeHtml(item.kind)}">${escapeHtml(KIND_LABEL[item.kind])}</span>` : "";
+  return `<article class="init-card accent-${escapeHtml(item.component)}${isPlaced ? " placed" : ""}">
+    <div class="card-badges">${kind}${item.foundation ? '<span class="badge foundation">Foundation</span>' : ""}${isPlaced ? `<span class="badge placed-badge">Built ${escapeHtml(quarterName(placed))}</span>` : ""}</div>
+    <h3>${escapeHtml(item.name)}</h3>
+    <p class="init-does">${escapeHtml(item.does)}</p>
+    <p class="init-cost">$${item.costK}K · ${fteLabel(item.fte)} FTE</p>
+    ${needs.length ? `<p class="init-needs"><b>Needs:</b> ${escapeHtml(joinNames(needs))}</p>` : ""}
+    ${unlocks.length ? `<p class="init-needs init-unlocks"><b>Unlocks:</b> ${escapeHtml(joinNames(unlocks))}</p>` : ""}
+    ${warn}
+    <div class="q-buttons" role="group" aria-label="Build quarter for ${escapeHtml(item.name)}">${buttons}</div>
+    ${reason ? `<p class="q-reason">${escapeHtml(reason)}</p>` : ""}
+    <p class="init-ref">${escapeHtml(item.ref)}</p>
+  </article>`;
+}
+
+// Program work first, then tools; the sort is stable, so model order holds within each kind.
+const byKind = (a, b) => (KIND_ORDER[a.kind] ?? 2) - (KIND_ORDER[b.kind] ?? 2);
+
+// Desktop shows the plain header and every group. Below 560px the CSS swaps in the
+// toggle header instead, and a closed group hides its cards.
+function groupTemplate(component, used) {
+  const items = initiatives.filter((item) => item.component === component.id).sort(byKind);
+  const placed = items.filter((item) => state.plan[item.id] !== undefined).length;
+  const open = state.openGroups.has(component.id);
+  const id = escapeHtml(component.id);
+  const cards = items.map((item) => initiativeCard(item, used)).join("");
+  const toggle = `<h2 class="init-group-toggle-wrap"><button class="init-group-toggle" type="button" data-action="toggle-group" data-id="${id}" data-key="group-${id}" aria-expanded="${open}" aria-controls="group-body-${id}"><b>${escapeHtml(component.number)}</b><span class="toggle-title">${escapeHtml(component.title)}</span><span class="toggle-meta">${items.length} ${items.length === 1 ? "card" : "cards"} · ${placed} placed</span><i class="toggle-chevron" aria-hidden="true"></i></button></h2>`;
+  return `<section class="init-group accent-${id}${open ? "" : " closed"}" aria-labelledby="group-${id}"><header class="init-group-head"><b>${escapeHtml(component.number)}</b><h2 id="group-${id}">${escapeHtml(component.title)}</h2><p>${escapeHtml(component.line)}</p></header>${toggle}<div class="init-group-body" id="group-body-${id}"><p class="init-group-line">${escapeHtml(component.line)}</p><div class="init-grid">${cards}</div></div></section>`;
+}
+
+function buildScreen() {
+  const used = spend(state.plan);
+  const count = Object.keys(state.plan).length;
+  const header = `<p class="eyebrow">Phase 3 · Roadmap</p><h1>Build your <span>roadmap</span></h1>
+    <div class="mission-objective"><span>Objective</span><p>Fund a one-year roadmap for ${escapeHtml(resources.company)}. At the end of the year, ${attackCountWord().toLowerCase()} attacks test your program. You can't cover everything, so choose. Win with a program score of ${winPercent}% or better: the average risk you cut, weighted by how likely each attack is.</p></div>
+    <div class="briefing company"><strong>${escapeHtml(resources.company)}</strong><br>${escapeHtml(resources.blurb)}</div>
+    <p class="game-note"><b>Illustrative game values:</b> budgets, costs, team sizes and how much each control cuts risk are made up for this game. They are not industry data.</p>`;
+  const content = `${resourceBar(used)}${timelineTemplate(used)}
+    <p class="definition rule-line">Program work makes tools work. A card runs at half strength for each prerequisite that isn't in place by its quarter, and only a card at full strength can stop an attack outright. Prerequisites can have their own prerequisites. Attacks land at the end of the year.</p>
+    ${hintTemplate()}
+    ${components.map((component) => groupTemplate(component, used)).join("")}
+    <div class="path-actions build-actions"><span class="path-count">${count} ${count === 1 ? "initiative" : "initiatives"} placed</span><button class="button" type="button" data-action="run" data-key="run-bottom"${count ? "" : " disabled"}>Run end-of-year attack simulation</button></div>`;
+  return stageShell(header, content);
+}
+
+/* Screen 4: the year plays out */
+
+function whyLine(result) {
+  const stopper = byId[result.scenario.stops].name;
+  if (result.outcome === "prevented") return `${stopper} was built with its prerequisites in place, so it stopped this outright.`;
+  const first = result.stopperLive
+    ? `${stopper} was built but ran at ${strengthWord(result.stopperMissing.length)} strength: ${prereqProblems(state.plan, result.scenario.stops)}.`
+    : `Nothing that stops this was built. ${stopper} would have.`;
+  const sorted = [...result.contributions].sort((a, b) => b.cut - a.cut);
+  let second = "Nothing you built cut this risk.";
+  if (sorted.length === 1) second = `${byId[sorted[0].id].name} alone cut ${percent(result.reduction)}%.`;
+  if (sorted.length > 1) second = `${joinNames(sorted.map((entry) => `${byId[entry.id].name} (${percent(entry.cut)}%)`))} together cut ${percent(result.reduction)}%.`;
+  return `${first} ${second}`;
+}
+
+function outcomeTemplate(result) {
+  if (result.outcome === "prevented") return '<div class="outcome"><b class="outcome-badge prevented">Prevented</b></div>';
+  if (result.outcome === "reduced") return `<div class="outcome"><b class="outcome-badge reduced">Risk cut by ${percent(result.reduction)}%</b><span class="meter cut-meter" aria-hidden="true"><i data-meter="${percent(result.reduction)}"></i></span></div>`;
+  const cut = result.reduction > 0 ? `<small>Risk cut by ${percent(result.reduction)}%</small>` : "";
+  return `<div class="outcome"><b class="outcome-badge unprotected">Unprotected</b>${cut}</div>`;
+}
+
+// Sourced notes for attacks based on real incidents. Verified against saved copies of the
+// CISA KEV feed and php.net in research/php-incident-2026-10/.
+const REAL_WORLD = {
+  php: "Based on PHP2Shell (CVE-2026-109618 and CVE-2026-109619). PHP shipped fixes on 21 Oct 2026, and CISA added both to its Known Exploited Vulnerabilities catalog on 26 Oct 2026, telling owners to evaluate each asset's internet exposure."
 };
 
-// How the company's inherent expected loss splits across the register's categories: broader than code, and where it stops.
-function categoryStripTemplate(register, loss) {
-  const parts = riskCategories.map((category) => {
-    const inherent = register.filter((row) => category.incidents.includes(row.incident.id)).reduce((sum, row) => sum + row.inherent, 0);
-    return { category, inherent, share: inherent / loss.inherent };
-  }).sort((a, b) => b.inherent - a.inherent);
-  return `<div class="cat-strip" aria-hidden="true">${parts.map(({ category, share }) => `<i class="cat-${category.id}" data-meter="${(share * 100).toFixed(1)}"></i>`).join("")}</div><ul class="cat-key">${parts.map(({ category, share, inherent }) => `<li><i class="cat-${category.id}"></i>${escapeHtml(category.label)} <b>${formatPercent(share)}</b> <small>${formatImpact(inherent)}</small></li>`).join("")}</ul>`;
+function attackCard(result, index, total, fresh) {
+  return `<article class="attack-card ${result.outcome}${fresh ? " fresh" : ""}" id="attack-${index}">
+    <span class="attack-meta"><span>Attack ${index + 1} of ${total}</span>${likelihoodBadge(result.scenario.likelihood)}<span>${weightLabel(result.scenario.weight)}</span></span>
+    <h3>${escapeHtml(result.scenario.title)}</h3>
+    <p>${escapeHtml(result.scenario.story)}</p>
+    ${outcomeTemplate(result)}
+    <p class="why">${escapeHtml(whyLine(result))}</p>
+    ${REAL_WORLD[result.scenario.id] ? `<p class="real-world"><span>Real world</span>${escapeHtml(REAL_WORLD[result.scenario.id])}</p>` : ""}
+  </article>`;
 }
 
-// The live score: how much of the company's no-controls expected loss the roadmap removes, against the bar.
-function scoreTemplate(scenario, score) {
-  const gap = passingReadiness - score.readiness;
-  const status = score.passed ? `Passing (${passingReadiness}% needed)` : `Pass at ${passingReadiness}% · ${gap} ${gap === 1 ? "point" : "points"} to go`;
-  return `<div class="readiness live-score${score.passed ? " passed" : ""}"><div class="readiness-head"><span>Your score // Risk removed or mitigated</span><strong>${score.readiness}%</strong></div><div class="meter score-meter${score.passed ? " full" : ""}"><i data-meter="${score.readiness}"></i><b class="goal" data-meter="${passingReadiness}" aria-hidden="true"></b></div><small>${status} · ${escapeHtml(scenario.name)} started at ${score.dayOne}%</small><p>This score is the share of ${escapeHtml(scenario.name)}'s inherent expected loss from security incidents that its controls remove: what already runs plus what you fund. To raise it, fund controls, cover their foundations, and start them early: the score blends the protection you have during the ${scenario.months} months (${score.during}% removed) with what you hand over at the end (${score.handover}% removed).</p></div>`;
+// The attack that cost the most score: weight times the risk left over.
+function biggestExposure(results) {
+  const worst = results.reduce((top, result) => {
+    const lost = result.scenario.weight * (1 - result.reduction);
+    return lost > top.lost ? { result, lost } : top;
+  }, { result: null, lost: 1e-9 });
+  return worst.result ? `Your biggest exposure: ${worst.result.scenario.title} (${worst.result.scenario.likelihood}).` : "Every attack was stopped outright.";
 }
 
-// Quarter steps of brightness. "full" matches the End column, which shows 100% from 99.5% up.
-const rampClass = (level) => (level >= 0.995 ? "full" : level > 0 ? `ramp r${Math.ceil(level * 4)}` : "");
-
-// Month by month: what each control in the roadmap actually delivers (ramp × foundations × the new-code share,
-// sampled mid-month as the score is), with the phase starts and the months the incident run's five incidents land.
-// A control without its foundations never turns bright, so the timeline teaches the same lesson as the cards.
-function roadmapTimelineTemplate(scenario, roadmap, run) {
-  const months = Array.from({ length: scenario.months }, (_, month) => month);
-  const last = scenario.months - 1;
-  const phaseStart = (month) => (month > 0 && startsFor(scenario).includes(month) ? "phase-start" : "");
-  const cell = (month, classes = "", text = "", title = "") => {
-    const names = [phaseStart(month), classes].filter(Boolean).join(" ");
-    return `<i${names ? ` class="${names}"` : ""}${title ? ` title="${escapeHtml(title)}"` : ""}>${text}</i>`;
-  };
-  const row = (label, cells, extra = "", end = "") => `<li class="gantt-row${extra}"><span class="gantt-label">${label}</span><span class="gantt-cells" aria-hidden="true">${cells}</span><span class="gantt-end">${end}</span></li>`;
-  const landings = run.map((_, index) => landingMonth(scenario, index));
-  const endLevels = levelsAt(scenario, roadmap, last);
-  const controls = [...roadmap.activated].sort((a, b) => startOf(roadmap, a) - startOf(roadmap, b)).map((id) => {
-    const initiative = findInitiative(id);
-    const start = startOf(roadmap, id);
-    const partial = postureOf(scenario, id) === "partial";
-    const atEnd = levelAt(scenario, roadmap, id, last);
-    const fullMonth = fullMonthOf(fullStrengthMonth(scenario, roadmap, id));
-    const ramp = atEnd < 1 ? `${formatPercent(atEnd)} ramped by month ${scenario.months}` : `fully ramped ${fullMonth === start + 1 ? "in" : "from"} month ${fullMonth}`;
-    const when = partial ? `Partial now · upgrade month ${start + 1} → ${ramp}` : `${initiative.foundation ? "Foundation · " : ""}Month ${start + 1} → ${ramp}`;
-    const status = controlStatus(scenario, roadmap, id);
-    const held = [
-      ...missingFoundations(initiative, endLevels).map(({ initiative: foundation }) => {
-        const level = endLevels[foundation.id] || 0;
-        return level === 0 ? `no ${foundation.short}` : roadmap.activated.includes(foundation.id) ? `${foundation.short} still ramping` : `partial ${foundation.short}`;
-      }),
-      status.category && shippedFactor(scenario, initiative, status.category) < 1 ? "new code only" : ""
-    ].filter(Boolean);
-    const cells = months.map((month) => {
-      const share = deliveredShareAt(scenario, roadmap, id, month);
-      const before = partial && month < start;
-      return cell(month, [rampClass(share), before ? "today" : ""].filter(Boolean).join(" "), "", `Month ${month + 1}: ${formatPercent(share)}${before ? " (partial today)" : ""}`);
-    }).join("");
-    const end = formatPercent(deliveredShareAt(scenario, roadmap, id, last));
-    const label = `${escapeHtml(optionName(scenario, id))}<small>${escapeHtml(when)}</small>${held.length ? `<small class="held">Held back: ${escapeHtml(listJoin(held))}</small>` : ""}`;
-    return row(label, cells, "", `<b${end === "100%" ? "" : ' class="short"'}>${end}</b><span class="sr-only"> of its rating at handover</span>`);
-  }).join("");
-  const axis = row("Month", months.map((month) => cell(month, "", month + 1)).join(""), " gantt-axis", "End");
-  const incidentsRow = row("Incidents", months.map((month) => {
-    const index = landings.indexOf(month);
-    return index < 0 ? cell(month) : cell(month, "landing", index + 1, `Incident ${index + 1}: ${run[index].title}`);
-  }).join(""), " gantt-incidents");
-  const empty = roadmap.activated.length ? "" : '<p class="gantt-empty">Fund a control and it appears here: when it starts, and how much it delivers each month.</p>';
-  const legend = `<p class="register-legend gantt-legend"><span><i class="key today"></i>Partial today</span><span><i class="key ramp"></i>Part strength</span><span><i class="key full"></i>Full rating</span><span><i class="key landing"></i>Incident lands</span><span><i class="key phase"></i>Phase starts</span></p>`;
-  return `<span class="step-label">Roadmap timeline // ${scenario.months} months</span><p class="resource-note">Each row is a control you funded. <b>Brightness is what it actually delivers each month</b>: how far it has ramped up, cut by any missing foundations. <b>End</b> is what you hand over. Earlier starts and complete foundations raise your score.</p><ol class="gantt">${axis}${incidentsRow}${controls}</ol>${empty}${legend}${incidentKeyTemplate(scenario, roadmap, run)}`;
+function summaryTemplate() {
+  const { results, score, won } = state.run;
+  return `<div class="run-summary${won ? " won" : " short"}">
+    <p class="eyebrow">Program score</p>
+    <div class="program-score"><strong>${percent(score)}%</strong><span class="verdict-tag">${won ? "Phase complete" : `Short of ${winPercent}%`}</span></div>
+    <div class="meter score-meter${won ? " full" : ""}"><i data-meter="${percent(score)}"></i><b class="goal" data-meter="${winPercent}" aria-hidden="true"></b></div>
+    <p class="score-scale"><span>0%</span><span><b aria-hidden="true">┃</b> Marker: win at ${winPercent}%</span><span>100%</span></p>
+    <p class="exposure">${escapeHtml(biggestExposure(results))}</p>
+    <div class="actions completion-actions"><button class="button secondary" type="button" data-action="adjust" data-key="adjust">Adjust roadmap</button><button class="button" type="button" data-action="finish" data-key="finish">Finish →</button></div>
+  </div>`;
 }
 
-// The five incidents by name (the grid only numbers them), with the controls that act on each when it lands.
-function incidentKeyTemplate(scenario, roadmap, run) {
-  const items = run.map((incident, index) => {
-    const month = landingMonth(scenario, index);
-    const category = incident.coverageNeeded;
-    const acting = [...new Set([...roadmap.activated, ...Object.keys(scenario.posture)])]
-      .filter((id) => (findInitiative(id).mitigates[category] || 0) > 0)
-      .map((id) => {
-        const posture = postureOf(scenario, id);
-        if (!roadmap.activated.includes(id)) return `${escapeHtml(findInitiative(id).short)}${posture === "partial" ? " <em>(partial today)</em>" : ""}`;
-        const name = escapeHtml(optionName(scenario, id));
-        if (month >= startOf(roadmap, id)) return name;
-        return `${name} <em>(${posture === "partial" ? "partial until" : "starts"} month ${startOf(roadmap, id) + 1})</em>`;
-      });
-    return `<li><b class="key-num" aria-hidden="true">${index + 1}</b><span><b>Month ${month + 1}</b> · ${escapeHtml(incident.title)}<small>${acting.length ? `Acting on it: ${acting.join(", ")}` : "Nothing you run or funded acts on it."}</small></span></li>`;
-  }).join("");
-  return `<ol class="incident-key">${items}</ol>`;
+function yearScreen() {
+  const { results } = state.run;
+  const total = results.length;
+  const done = state.reveal >= total;
+  const dots = results.map((_, index) => `<i class="progress-dot${index === state.reveal - 1 ? " active" : ""}${index < state.reveal ? " complete" : ""}"></i>`).join("");
+  const cards = results.slice(0, state.reveal).map((result, index) => attackCard(result, index, total, index === state.reveal - 1)).join("");
+  const controls = done
+    ? summaryTemplate()
+    : `<div class="actions run-controls"><button class="button" type="button" data-action="next-attack" data-key="next-attack">Next attack →</button><button class="button secondary" type="button" data-action="show-all" data-key="show-all">Show all</button></div>`;
+  const header = `<p class="eyebrow">Phase 4 · The year</p><h1>The year <span>plays out</span></h1><p>The year is over and the attacks arrive, one at a time, starting with the one that counts most toward your score.</p>`;
+  const content = `<div class="incident-progress"><span class="answer-instruction">Attack ${Math.min(state.reveal, total)} of ${total}</span><div class="progress-dots">${dots}</div></div><div class="attack-list" aria-live="polite">${cards}</div>${controls}`;
+  return stageShell(header, content);
 }
 
-// The incident run is a setting for the simulation: it picks which five incidents the attendee lives through.
-function runModeTemplate(scenario, mode, run) {
-  const current = runModes.find((item) => item.id === mode);
-  const preview = run.map((incident, index) => `<li><b>Month ${landingMonth(scenario, index) + 1}</b> ${escapeHtml(incident.title)}</li>`).join("");
-  const other = incidentRun(scenario, runModes.find((item) => item.id !== mode).id);
-  const same = other.every((incident, index) => incident.id === run[index].id) ? ` At ${escapeHtml(scenario.name)}, both settings happen to send the same five.` : "";
-  return `<fieldset class="run-mode"><legend>Simulation setting // incident run</legend><p>After you launch, five incidents from the register hit ${escapeHtml(scenario.name)}, spread across the ${scenario.months} months. This setting picks which five.</p><div class="segmented">${runModes.map((item) => `<label><input type="radio" name="run-mode" value="${item.id}"${item.id === mode ? " checked" : ""}><span>${escapeHtml(item.label)}</span></label>`).join("")}</div><p><b>${escapeHtml(current.label)}:</b> ${escapeHtml(lowerFirst(current.summary))}. ${escapeHtml(current.checks)}</p><ol class="run-preview">${preview}</ol><p class="run-note">It never changes your score, which always counts all ${incidents.length} threats.${same}</p></fieldset>`;
+/* Screen 5: finish */
+
+// Three resource QR codes. The SVGs are generated elsewhere (dark modules on white),
+// so each sits on its own white tile with a quiet zone so phones can scan it.
+function qrTile(link) {
+  return `<figure class="qr-tile"><span class="qr-frame"><img src="${escapeHtml(link.image)}" alt="QR code: ${escapeHtml(link.label)}" width="160" height="160"></span><figcaption><strong>${escapeHtml(link.label)}</strong><small>${escapeHtml(link.url)}</small></figcaption></figure>`;
 }
 
-function buildTemplate(scenario) {
-  const { activated, runMode } = state.sim;
-  const spent = totals(scenario, state.sim);
-  const budgetLeft = scenario.budget - spent.budget;
-  const phases = phasesFor(scenario).map((phase, index) => ({ ...phase, left: phase.capacity - spent.phaseWeeks[index] }));
-  const score = scoreRoadmap(scenario, state.sim);
-  const { loss } = score;
-  const run = incidentRun(scenario, runMode);
-  const summary = `<div class="live-summary"><span>Score <b>${score.readiness}%</b> (pass ${passingReadiness}%)</span><span>$${budgetLeft}K left</span><span>Eng-weeks left ${phases.map((phase, index) => `P${index + 1} ${formatWeeks(phase.left)}`).join(" · ")}</span><span>Residual ${formatLoss(loss.current)} → <b>${formatLoss(loss.target)}</b></span></div>`;
-  const phaseMeters = phases.map((phase, index) => `<div class="resource"><div class="resource-head"><span>Eng-weeks · ${phaseName(phase, index)}</span><strong>${formatWeeks(phase.left)} / ${formatWeeks(phase.capacity)}</strong></div><div class="meter"><i data-meter="${percentOf(phase.left, phase.capacity)}"></i></div></div>`).join("");
-  return {
-    console: `<div class="briefing"><strong>${escapeHtml(scenario.name)} // ${escapeHtml(scenario.tagline)}</strong><br>${escapeHtml(scenario.description)}</div><div class="evidence intel"><strong>Risk drivers:</strong> ${escapeHtml(scenario.threat)} ${escapeHtml(scenario.impactNote)}</div><div class="briefing posture"><strong>Starting posture:</strong> ${escapeHtml(scenario.postureStory)}</div><ul class="build-steps"><li>Tick a card to fund it, or to upgrade a partial control to full.</li><li>The "Cuts loss from" figures assume a control's foundations are in place and it has fully ramped up. The line under them shows what you'd actually get.</li><li>Costs cover setup plus running the control until month ${scenario.months}, sized for ${escapeHtml(scenario.name)}.</li></ul>${summary}${groups.map((group) => groupTemplate(scenario, group)).join("")}`,
-    panel: `<span class="step-label">Resource bay</span><h2>${escapeHtml(scenario.name)}</h2>
-      ${scoreTemplate(scenario, score)}
-      <div class="resource"><div class="resource-head"><span>Budget remaining</span><strong>$${budgetLeft}K / $${scenario.budget}K</strong></div><div class="meter"><i data-meter="${percentOf(budgetLeft, scenario.budget)}"></i></div><small class="resource-sub">Tools and services. Your team's time is counted separately, in engineer-weeks.</small></div>
-      ${phaseMeters}<p class="resource-note"><b>Your team:</b> ${escapeHtml(lowerFirst(scenario.staffing))} (≈${peopleOf(scenario)} people full-time). Each phase has its own engineer-weeks; any you don't use are lost. Controls already running cost you nothing.</p>
-      ${roadmapTimelineTemplate(scenario, state.sim, run)}
-      ${registerTemplate(scenario, state.sim)}
-      ${runModeTemplate(scenario, runMode, run)}
-      <div class="feedback" id="feedback">${activated.length ? `${activated.length} ${activated.length === 1 ? "control" : "controls"} in your roadmap. Launch to see five incidents play out.` : "Fund or upgrade at least one control to launch."}</div>
-      <div class="actions"><button class="button" id="launch" type="button"${activated.length ? "" : " disabled"}>Launch simulation</button><button class="button secondary" id="change-scenario" type="button">Change company</button></div>`
-  };
+function finishScreen() {
+  return `<section class="completion"><div class="completion-card finish-card" aria-labelledby="completion-title">
+    <img class="completion-logo" src="./assets/space-owasp.png" alt="OWASP space logo">
+    <p class="eyebrow">Qualification confirmed</p>
+    <h1 id="completion-title">Welcome, <span>Commander.</span></h1>
+    <div class="ctf-award"><span>Hackers Challenge CTF token</span><code id="ctf-token">${escapeHtml(CTF_TOKEN)}</code><button class="button" type="button" data-action="copy" data-key="copy">Copy token</button></div>
+    <section class="qr-section" aria-labelledby="qr-title"><h2 id="qr-title" class="qr-heading">Keep building your roadmap</h2><div class="qr-row">${RESOURCE_LINKS.map(qrTile).join("")}</div></section>
+    <div class="actions completion-actions"><button class="button secondary" type="button" data-action="restart" data-key="restart">Start over</button></div>
+  </div></section>`;
 }
 
-const outcomeLabels = { neutralized: "Stopped", contained: "Partly contained", breached: "Got through" };
+/* End-of-year attack simulation: a modal console above the dimmed roadmap */
 
-function incidentLogTemplate(results) {
-  return `<div class="incident-log">${results.map((result) => `<div class="${result.outcome}"><span>${escapeHtml(result.incident.title)}</span><em>${formatPercent(result.mitigation)} mitigated · −${formatImpact(result.impact)}</em></div>`).join("")}</div>`;
+// The overlay mounts in #sim-root, outside #main, so a repaint never kills the canvas
+// mid-animation. The engine and renderer load on demand; if either fails, the dialog
+// still offers the after-action report, so the flow never dead-ends.
+let sim = null;
+let simToken = 0;
+
+function simButtons(done) {
+  return done
+    ? `<button class="button secondary" type="button" data-action="sim-back" data-key="sim-back">Back to roadmap</button><button class="button" type="button" data-action="sim-report" data-key="sim-report">See after-action report</button>`
+    : `<button class="button secondary" type="button" data-action="sim-skip" data-key="sim-skip">Skip to results</button>`;
 }
 
-// "WAF 11% (of 30%, 38% ramped)": what the control delivered, with the reasons it fell short beside the number.
-function contributorText(item) {
-  const notes = [
-    Math.round(item.effectiveness * 100) < Math.round(item.rated * 100) ? `of ${formatPercent(item.rated)}` : "",
-    item.ramping ? `${formatPercent(item.level)} ramped` : item.level < 1 ? "partial" : ""
-  ].filter(Boolean);
-  return `${escapeHtml(item.initiative.short)} ${formatPercent(item.effectiveness)}${notes.length ? ` (${notes.join(", ")})` : ""}`;
+function simTemplate() {
+  const company = escapeHtml(resources.company);
+  return `<div class="sim-backdrop">
+    <section class="sim-window console" role="dialog" aria-modal="true" aria-labelledby="sim-title" aria-describedby="sim-status" tabindex="-1">
+      <div class="console-bar"><span id="sim-title">Attack simulation // ${company}</span><span class="console-lights" aria-hidden="true"><i></i><i></i><i></i></span></div>
+      <div class="sim-body">
+        <canvas class="sim-canvas" role="img" aria-label="Animation: ${escapeHtml(attackCountWord().toLowerCase())} attacks test the roadmap for ${company}. Each result is announced below."></canvas>
+        <p class="sim-fallback" hidden>The animation couldn't load. Your results are ready in the after-action report.</p>
+      </div>
+      <div class="sim-foot">
+        <div class="sim-health">
+          <div class="resource-head"><span>Organization health</span><strong data-sim="health">100%</strong></div>
+          <div class="meter score-meter sim-meter"><i data-meter="100"></i><b class="goal" data-meter="${winPercent}" aria-hidden="true"></b></div>
+          <p class="score-scale"><span>0%</span><span><b aria-hidden="true">┃</b> Hold ${winPercent}%</span><span>100%</span></p>
+        </div>
+        <p class="sim-status" id="sim-status" aria-live="polite">Loading the simulation…</p>
+        <div class="sim-actions" data-sim="actions">${simButtons(false)}</div>
+      </div>
+    </section>
+  </div>`;
 }
 
-// Two coaching lines: controls that would cut this threat, and missing foundations holding back the ones already in play.
-function strengthenLines(scenario, roadmap, category) {
-  const { controls, foundations } = strengthenOptions(scenario, roadmap, category);
-  const lines = [];
-  if (foundations.length) lines.push(`<b>Holding it back:</b> ${foundations.slice(0, 2).map((item) => `${item.upgrade ? "partial" : "no"} ${escapeHtml(item.initiative.short)} (weakens ${escapeHtml(listJoin(item.hampers.map((hampered) => hampered.short)))})`).join("; ")}`);
-  if (controls.length) lines.push(`<b>Would strengthen it:</b> ${controls.map((item) => `${item.ramping ? `starting ${item.upgrade ? "the upgrade to " : ""}${escapeHtml(item.initiative.short)} earlier` : `${item.upgrade ? "upgrading " : ""}${escapeHtml(item.initiative.short)}`} (cuts ${formatPercent(item.effectiveness * shippedFactor(scenario, item.initiative, category))})`).join(" or ")}`);
-  return lines;
+function setSimHealth(fraction) {
+  const value = percent(Math.max(0, Math.min(1, fraction)));
+  simRoot.querySelector(".sim-meter > i").dataset.meter = value;
+  simRoot.querySelector(".sim-meter").classList.toggle("warn", fraction < WIN_BAR - 1e-9);
+  simRoot.querySelector('[data-sim="health"]').textContent = `${value}%`;
+  paintMeters(simRoot);
 }
 
-// One cell per month: where the run's incidents land, which phases open, and where the run is now.
-function timelineTemplate(scenario) {
-  const landings = lab.run.map((_, index) => landingMonth(scenario, index));
-  const cells = Array.from({ length: scenario.months }, (_, month) => {
-    const index = landings.indexOf(month);
-    const classes = [
-      startsFor(scenario).includes(month) && month > 0 ? "phase-start" : "",
-      index >= 0 ? "landing" : "",
-      index === lab.index ? "active" : "",
-      index >= 0 && index < lab.results.length ? lab.results[index].outcome : ""
-    ].filter(Boolean).join(" ");
-    return `<li${classes ? ` class="${classes}"` : ""}><span>${month + 1}</span></li>`;
-  }).join("");
-  return `<ol class="timeline" aria-label="${scenario.months}-month timeline with incident landing months">${cells}</ol>`;
+function setSimStatus(message, tone = "") {
+  const status = simRoot.querySelector(".sim-status");
+  status.textContent = message;
+  status.classList.toggle("held", tone === "held");
+  status.classList.toggle("below", tone === "below");
 }
 
-function incidentTemplate(scenario) {
-  const incident = lab.run[lab.index];
-  const result = lab.revealed ? lab.results[lab.index] : null;
-  const last = lab.index === lab.run.length - 1;
-  let outcome;
-  if (!result) {
-    outcome = `<button class="button" id="assess" type="button"${lab.assessing ? " disabled" : ""}>${lab.assessing ? '<span class="thinking" aria-hidden="true"><i></i><i></i><i></i></span>&nbsp;Assessing…' : "Assess impact"}</button>`;
-  } else {
-    const threat = escapeHtml(formatCoverage(incident.coverageNeeded));
-    const explanation = {
-      neutralized: `Your controls removed ${formatPercent(result.mitigation)} of the loss from this incident.`,
-      contained: `Your controls removed ${formatPercent(result.mitigation)} of the loss, but part of this incident got through.`,
-      breached: result.mitigation > 0 ? `Only ${formatPercent(result.mitigation)} of the loss was stopped: what ${escapeHtml(scenario.name)} runs wasn't built for ${threat}, or wasn't strong enough yet.` : `Nothing ${escapeHtml(scenario.name)} runs addressed ${threat}. The threat slipped through.`
-    }[result.outcome];
-    const layers = result.contributors.length
-      ? `<p class="lesson"><b>Controls in play:</b> ${result.contributors.map(contributorText).join(" · ")}${result.contributors.length > 1 ? ` → ${formatPercent(result.mitigation)} together (overlaps counted once)` : ""}</p>`
-      : "";
-    const pending = result.notStarted.length
-      ? `<p class="lesson"><b>Not started yet:</b> ${result.notStarted.map((item) => `${item.upgrade ? `the ${escapeHtml(item.initiative.short)} upgrade` : escapeHtml(item.initiative.short)} (starts ${startPhrase(item.start)})`).join(", ")}</p>`
-      : "";
-    const coaching = result.outcome === "neutralized" ? [] : strengthenLines(scenario, lab.roadmap, incident.coverageNeeded);
-    outcome = `<div class="verdict"><strong>${outcomeLabels[result.outcome]}</strong><p>${explanation}</p></div><div class="impact-grid"><span><small>Loss avoided</small><strong>${formatImpact(result.potential - result.impact)}</strong></span><span><small>Loss taken</small><strong>−${formatImpact(result.impact)}</strong></span></div>${layers}${pending}${coaching.map((line) => `<p class="lesson">${line}</p>`).join("")}`;
+function shotMessage(shot) {
+  const label = shot.label || scenarios.find((scenario) => scenario.id === shot.scenarioId)?.title || "Attack";
+  const result = shot.outcome === "prevented" ? "prevented" : shot.outcome === "reduced" ? `risk cut ${percent(shot.reduction)}%` : "unprotected";
+  return `${label}: ${result}. Health ${percent(Math.max(0, shot.healthAfter))}%.`;
+}
+
+function simShot(token, shot) {
+  if (sim?.token !== token || sim.done) return;
+  setSimHealth(shot.healthAfter);
+  setSimStatus(shotMessage(shot));
+}
+
+// The verdict comes from runAll, the same source as the after-action report.
+function simDone(token) {
+  if (sim?.token !== token || sim.done) return;
+  sim.done = true;
+  track("simulator", "completed");
+  const { score, won } = runAll(state.plan);
+  if (sim.data && Math.abs(sim.data.finalHealth - score) > 1e-6) console.warn(`Attack simulation: engine finalHealth ${sim.data.finalHealth} differs from runAll score ${score}.`);
+  setSimHealth(score);
+  setSimStatus(won ? `Roadmap held: ${percent(score)}%` : `Below ${winPercent}%: ${percent(score)}%`, won ? "held" : "below");
+  const actionsBox = simRoot.querySelector('[data-sim="actions"]');
+  const hadFocus = actionsBox.contains(document.activeElement) || !simRoot.contains(document.activeElement);
+  actionsBox.innerHTML = simButtons(true);
+  if (hadFocus) actionsBox.querySelector('[data-key="sim-report"]').focus();
+}
+
+function simFallback(token, error) {
+  if (sim?.token !== token) return;
+  console.error("Attack simulation: sim/engine.js or sim/renderer.js failed to load or start. Showing results without the animation.", error);
+  try { sim.controller?.destroy(); } catch (destroyError) { console.error(destroyError); }
+  sim.controller = null;
+  simRoot.querySelector(".sim-canvas").hidden = true;
+  simRoot.querySelector(".sim-fallback").hidden = false;
+  simDone(token);
+}
+
+function setBackgroundInert(on) {
+  [main, document.querySelector(".topbar"), document.querySelector("footer"), document.querySelector(".skip-link")].forEach((element) => {
+    if (element) element.inert = on;
+  });
+  document.body.classList.toggle("sim-open", on);
+}
+
+async function openSimulation(opener) {
+  if (sim) return;
+  const token = ++simToken;
+  sim = { token, openerKey: opener?.dataset.key, controller: null, data: null, done: false, skipRequested: false };
+  simRoot.innerHTML = simTemplate();
+  paintMeters(simRoot);
+  setBackgroundInert(true);
+  document.addEventListener("keydown", simKeydown);
+  simRoot.querySelector('[data-key="sim-skip"]').focus();
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let engine;
+  let renderer;
+  try {
+    [engine, renderer] = await Promise.all([import("./sim/engine.js"), import("./sim/renderer.js")]);
+  } catch (error) {
+    simFallback(token, error);
+    return;
   }
-  const nextButton = result ? `<button class="button" id="next-incident" type="button">${last ? "View results" : "Next incident"} →</button>` : "";
-  const sofar = summarizeRun(lab.results);
-  const mode = runModes.find((item) => item.id === lab.mode);
-  const month = landingMonth(scenario, lab.index);
-  return {
-    console: `<div class="incident-progress"><span class="answer-instruction">Incident ${lab.index + 1} of ${lab.run.length} // month ${month + 1} of ${scenario.months}</span><div class="progress-dots">${lab.run.map((_, index) => `<i class="progress-dot ${index === lab.index ? "active" : ""} ${index < lab.results.length ? "complete" : ""}"></i>`).join("")}</div></div>
-      ${timelineTemplate(scenario)}
-      <article class="incident-card ${result ? result.outcome : ""}"><span class="severity ${incident.severity}">${incident.severity} // month ${month + 1}</span><h3>${escapeHtml(incident.title)}</h3><p>${escapeHtml(incident.description)}</p>${result ? "" : `<p class="stakes">Potential impact at ${escapeHtml(scenario.name)}: <b>${formatImpact(impactOf(incident, scenario))}</b> · likelihood <b>${formatPercent(scenario.riskRegister[incident.id])}</b> in ${scenario.months} months</p>`}${outcome}</article><div class="actions incident-actions">${nextButton}</div>`,
-    panel: `<span class="step-label">Incident log // ${escapeHtml(scenario.name)}</span><h2>${escapeHtml(mode.label)}</h2><p class="resource-note">At ${escapeHtml(scenario.name)}: ${escapeHtml(lowerFirst(mode.summary))}. Your score comes from the whole register, not just these five.</p><div class="resource-head"><span>Loss taken so far</span><strong>${formatImpact(sofar.financialImpact)} of ${formatImpact(sofar.exposure)}</strong></div>${lab.results.length ? incidentLogTemplate(lab.results) : "<p>No incidents assessed yet.</p>"}<div class="feedback" id="feedback">Your roadmap: ${lab.roadmap.activated.map((id) => `${escapeHtml(optionName(scenario, id))} (starts ${startPhrase(lab.roadmap.starts[id])})`).join(", ")}</div><div class="actions"></div>`
-  };
-}
-
-function budgetComparison(run, scenario) {
-  if (!run.financialImpact) return `<p class="stakes">No losses this run. The ${formatImpact(scenario.budget)} program paid for itself.</p>`;
-  const ratio = run.financialImpact / scenario.budget;
-  return `<p class="stakes">This run's loss, <b>${formatImpact(run.financialImpact)}</b>, is ${ratio >= 1 ? `${ratio.toFixed(1)}× the whole ${formatImpact(scenario.budget)} program budget` : `${Math.round(ratio * 100)}% of the ${formatImpact(scenario.budget)} program budget`}.</p>`;
-}
-
-// The register rows with the most expected loss left, each with what would cut it further.
-function gapsTemplate(scenario, register) {
-  return [...register].sort((a, b) => b.target - a.target).slice(0, 3).map((row) => {
-    const lines = strengthenLines(scenario, lab.roadmap, row.incident.coverageNeeded);
-    return `<li><strong>${escapeHtml(row.incident.title)}</strong>: ${formatImpact(row.target)} expected loss left (${formatPercent(row.targetMitigation)} mitigated)${lines.map((line) => `<br><small>${line}</small>`).join("")}</li>`;
-  }).join("");
-}
-
-// After a failed launch: the single change that would raise the score most, and why it works.
-function fixHintTemplate(scenario, roadmap, score) {
-  const fix = biggestFix(scenario, roadmap);
-  if (!fix) return "<small>Check what's holding your controls back, rebalance against the register, and launch again.</small>";
-  // "the SAST upgrade" for a partial control, the plain name otherwise.
-  const phrase = (id) => escapeHtml(postureOf(scenario, id) === "partial" ? `the ${findInitiative(id).short} upgrade` : findInitiative(id).short);
-  const action = fix.kind === "move" ? `Start ${phrase(fix.id)} in month ${fix.start + 1} instead of month ${fix.from + 1}`
-    : fix.kind === "swap" ? `Swap ${phrase(fix.drop)} for ${phrase(fix.id)}, from month ${fix.start + 1}`
-      : `${postureOf(scenario, fix.id) === "partial" ? "Upgrade" : "Fund"} ${escapeHtml(findInitiative(fix.id).short)}, from month ${fix.start + 1}`;
-  const initiative = findInitiative(fix.id);
-  const leaning = initiative.foundation ? fix.roadmap.activated.filter((id) => findInitiative(id).needs.includes(fix.id)).map((id) => findInitiative(id).short) : [];
-  // Otherwise, the threat whose expected loss the fix cuts most.
-  const before = new Map(registerFor(scenario, roadmap).map((row) => [row.incident.id, row.target]));
-  const gain = registerFor(scenario, fix.roadmap).map((row) => ({ row, cut: before.get(row.incident.id) - row.target })).sort((a, b) => b.cut - a.cut)[0];
-  const why = leaning.length ? ` It's a foundation: ${escapeHtml(listJoin(leaning))} in your roadmap ${leaning.length === 1 ? "delivers" : "each deliver"} ${formatPercent(penalties[fix.id])} less without it.`
-    : gain && gain.cut > 0 ? ` The biggest gain is on ${escapeHtml(gain.row.incident.title)}: ${formatImpact(gain.cut)} less expected loss.` : "";
-  const result = fix.readiness >= passingReadiness ? `That alone takes your score from ${score.readiness}% to ${fix.readiness}%, a pass.` : `That alone takes your score from ${score.readiness}% to ${fix.readiness}%; you need ${passingReadiness}%.`;
-  return `<small><b>Biggest single fix:</b> ${action}. ${result}${why}</small>`;
-}
-
-function resultsTemplate(scenario) {
-  const run = summarizeRun(lab.results);
-  const score = scoreRoadmap(scenario, lab.roadmap);
-  const register = registerFor(scenario, lab.roadmap);
-  const other = runModes.find((item) => item.id !== lab.mode);
-  const sameRun = incidentRun(scenario, other.id).every((incident, index) => incident.id === lab.run[index].id);
-  const header = `<span class="step-label">After-action report // ${escapeHtml(scenario.name)}</span>`;
-  const gaps = `<ol class="gap-list">${gapsTemplate(scenario, register)}</ol>`;
-  return {
-    console: `<div class="sim-score"><p class="eyebrow">${score.tier.label}</p><div class="score-orbit"><strong>${score.readiness}</strong><span>% of risk removed<br>or mitigated<br>${score.passed ? "Passed" : `Need ${passingReadiness}%`}</span></div><p>${score.tier.desc}</p></div>
-      <p class="stakes">This run's five incidents cost <b>${formatImpact(run.financialImpact)}</b>. Across all ${register.length} threats, your roadmap cut ${escapeHtml(scenario.name)}'s residual risk to <b>${formatImpact(score.loss.during)}</b> over the ${scenario.months} months (${score.during}% removed) and <b>${formatImpact(score.loss.handover)}</b> at handover (${score.handover}% removed). Your score weighs those two equally: ${formatLoss(score.loss.target)}, shown below as Residual with your roadmap. It started at ${formatImpact(score.loss.current)} (${score.dayOne}% removed), against ${formatImpact(score.loss.inherent)} inherent.</p>
-      ${lossTiles(score.loss)}
-      <p class="scope-note">Your <b>${score.readiness}%</b> is of ${escapeHtml(scenario.name)}'s <b>application and platform</b> risk: the slice this mission models, not all of the company's risk. Industry-wide, exploited vulnerabilities (${breachRoutes.routes.find((route) => route.id === "exploit").share}% of breaches) and stolen credentials (${breachRoutes.routes.find((route) => route.id === "credentials").share}%) are the routes a program like this partly closes; phishing, pretexting and third-party compromise sit with your peers' programs (${escapeHtml(breachRoutes.source)}).</p>
-      <div class="stat-tiles"><span><strong>${run.defendedCount}</strong><small>Stopped</small></span><span><strong>${run.containedCount}</strong><small>Partly contained</small></span><span><strong>${run.breachedCount}</strong><small>Got through</small></span><span><strong>${formatImpact(run.financialImpact)}</strong><small>Loss this run</small></span></div>${incidentLogTemplate(lab.results)}
-      <div class="actions">${sameRun ? "" : `<button class="button secondary" id="other-year" type="button">Replay with the other setting: ${escapeHtml(other.label)} →</button>`}${score.passed ? '<button class="button secondary" data-action="rebuild" type="button">Rebuild roadmap</button>' : ""}</div><p class="resource-note">${sameRun ? `Both settings send the same five incidents at ${escapeHtml(scenario.name)}, so there's no other run to replay.` : "Same roadmap, the other way of picking five incidents. Your score doesn't change."}</p>`,
-    panel: score.passed
-      ? `${header}<h2>Roadmap verified.</h2><p>With your roadmap, ${escapeHtml(scenario.name)}'s controls remove ${score.readiness}% of its expected loss. No roadmap removes all of it. The biggest risks you're still carrying:</p>${gaps}${budgetComparison(run, scenario)}<div class="feedback" id="feedback"></div><div class="actions"></div>`
-      : `${header}<h2>The roadmap did not hold.</h2><p>With your roadmap, ${escapeHtml(scenario.name)}'s controls remove ${score.readiness}% of its expected loss; it needs ${passingReadiness}%. The biggest risks left:</p>${gaps}${budgetComparison(run, scenario)}<div class="feedback bad" id="feedback"><strong>Verification failed.</strong><br>${fixHintTemplate(scenario, lab.roadmap, score)}</div><div class="actions"><button class="button" data-action="rebuild" type="button">Rebuild roadmap</button><button class="button secondary" id="change-scenario" type="button">Change company</button></div>`,
-    passed: score.passed
-  };
-}
-
-function paintSimulator(focusSelector) {
-  const scenario = activeScenario();
-  const view = lab.phase === "briefing" || !scenario ? briefingTemplate()
-    : lab.phase === "build" ? buildTemplate(scenario)
-      : lab.phase === "incidents" ? incidentTemplate(scenario)
-        : resultsTemplate(scenario);
-  document.querySelector("#sim-console").innerHTML = view.console;
-  document.querySelector("#sim-panel").innerHTML = view.panel;
-  paintMeters(document.querySelector("#sim-workspace"));
-  if (focusSelector) document.querySelector(focusSelector)?.focus();
-  if (lab.phase === "results" && view.passed) completeMission("simulator");
-}
-
-function startRun(mode) {
-  Object.assign(lab, { phase: "incidents", index: 0, results: [], revealed: false, assessing: false, mode, run: incidentRun(activeScenario(), mode) });
-  paintSimulator("#assess");
-  document.querySelector("#sim-workspace").scrollIntoView({ behavior: reduceMotion() ? "auto" : "smooth", block: "start" });
-}
-
-function bindSimulator() {
-  lab = { phase: activeScenario() ? "build" : "briefing", index: 0, results: [], revealed: false, assessing: false, closedGroups: new Set(), openDetails: new Set() };
-  const workspace = document.querySelector("#sim-workspace");
-  paintSimulator();
-
-  workspace.addEventListener("change", (event) => {
-    if (lab.phase !== "build") return;
-    const startInput = event.target.closest("input[data-start-for]");
-    if (startInput) {
-      const id = startInput.dataset.startFor;
-      const start = Number(startInput.value);
-      if (state.sim.activated.includes(id) && canPlace(activeScenario(), state.sim, id, start)) state.sim.starts = { ...state.sim.starts, [id]: start };
-      saveState();
-      paintSimulator(`input[name="start-${id}"][value="${state.sim.starts[id]}"]`);
+  if (sim?.token !== token) return;
+  try {
+    sim.data = engine.buildSimulation(state.plan);
+    setSimStatus(`${attackCountWord()} attacks incoming.`);
+    const controller = renderer.mountSimulator(simRoot.querySelector(".sim-canvas"), sim.data, {
+      reducedMotion,
+      onShot: (shot) => simShot(token, shot),
+      onDone: () => simDone(token)
+    });
+    // Closed while mounting: nothing is left to animate into.
+    if (sim?.token !== token) {
+      controller.destroy();
       return;
     }
-    const mode = event.target.closest('input[name="run-mode"]');
-    if (mode) {
-      state.sim.runMode = validRunMode(mode.value);
-      saveState();
-      paintSimulator(`input[name="run-mode"][value="${state.sim.runMode}"]`);
-      return;
-    }
-    const input = event.target.closest('input[name="initiative"]');
-    if (!input) return;
-    const id = input.value;
-    const start = earliestStart(activeScenario(), state.sim, id);
-    if (input.checked && start !== null && !state.sim.activated.includes(id)) {
-      state.sim.activated = [...state.sim.activated, id];
-      state.sim.starts = { ...state.sim.starts, [id]: start };
-    } else if (!input.checked) {
-      state.sim.activated = state.sim.activated.filter((item) => item !== id);
-      const { [id]: _removed, ...starts } = state.sim.starts;
-      state.sim.starts = starts;
-    }
-    saveState();
-    paintSimulator(`input[name="initiative"][value="${input.value}"]`);
-  });
-
-  // Remember collapsed groups across repaints. toggle does not bubble, so listen in the capture phase.
-  workspace.addEventListener("toggle", (event) => {
-    const keep = event.target.dataset?.keep;
-    if (keep) {
-      if (event.target.open) lab.openDetails.add(keep);
-      else lab.openDetails.delete(keep);
-      return;
-    }
-    const group = event.target.dataset?.group;
-    if (!group) return;
-    if (event.target.open) lab.closedGroups.delete(group);
-    else lab.closedGroups.add(group);
-  }, true);
-
-  workspace.addEventListener("click", async (event) => {
-    const scenarioCard = event.target.closest("[data-scenario]");
-    if (scenarioCard) {
-      state.sim = { ...state.sim, scenarioId: scenarioCard.dataset.scenario, activated: [], starts: {} };
-      saveState();
-      lab.phase = "build";
-      paintSimulator();
-      return;
-    }
-    if (event.target.closest("#change-scenario")) {
-      state.sim = { ...state.sim, scenarioId: null, activated: [], starts: {} };
-      saveState();
-      lab.phase = "briefing";
-      paintSimulator();
-      return;
-    }
-    if (event.target.closest("#launch")) {
-      if (!state.sim.activated.length) return;
-      lab.roadmap = { activated: [...state.sim.activated], starts: { ...state.sim.starts } };
-      startRun(state.sim.runMode);
-      return;
-    }
-    if (event.target.closest("#other-year")) {
-      state.sim.runMode = runModes.find((item) => item.id !== lab.mode).id;
-      saveState();
-      startRun(state.sim.runMode);
-      return;
-    }
-    if (event.target.closest('[data-action="rebuild"]')) {
-      lab.phase = "build";
-      paintSimulator();
-      return;
-    }
-    if (event.target.closest("#assess")) {
-      if (lab.assessing || lab.revealed) return;
-      const session = lab;
-      lab.assessing = true;
-      paintSimulator();
-      await wait(academyConfig.timing.assessMs);
-      if (lab !== session) return;
-      const scenario = activeScenario();
-      lab.results.push(assessIncident(lab.run[lab.index], scenario, lab.roadmap, landingMonth(scenario, lab.index)));
-      lab.assessing = false;
-      lab.revealed = true;
-      paintSimulator("#next-incident");
-      return;
-    }
-    if (event.target.closest("#next-incident")) {
-      const last = lab.index === lab.run.length - 1;
-      if (last) lab.phase = "results";
-      else { lab.index += 1; lab.revealed = false; }
-      paintSimulator(last ? null : "#assess");
-    }
-  });
+    sim.controller = controller;
+    if (sim.skipRequested) skipSimulation();
+  } catch (error) {
+    simFallback(token, error);
+  }
 }
 
-/* Mission 03: The Commander's Map */
-
-const levelLabel = (id) => levels.find((level) => level.id === id)?.label || "";
-const timelineLabel = (id) => timelines.find((timeline) => timeline.id === id)?.label || "";
-
-function slotStatus(row) {
-  return isRowComplete(row) ? "Complete" : isRowStarted(row) ? "In progress" : "Open";
+function skipSimulation() {
+  if (!sim || sim.done) return;
+  if (!sim.controller) {
+    sim.skipRequested = true;
+    return;
+  }
+  sim.controller.skip();
+  // The renderer should fire onDone from skip(); never leave the player without a way on.
+  if (!sim.done) {
+    console.warn("Attack simulation: skip() did not fire onDone.");
+    simDone(sim.token);
+  }
 }
 
-function selectField(rowIndex, id, label, options, value) {
-  return `<div class="lab-field third"><label for="r${rowIndex}-${id}">${label}</label><select id="r${rowIndex}-${id}" data-row="${rowIndex}" data-field="${id}"><option value="">Select…</option>${options.map((option) => `<option value="${option.id}"${value === option.id ? " selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select></div>`;
+function closeSimulation({ restoreFocus = true } = {}) {
+  if (!sim) return;
+  const { controller, openerKey } = sim;
+  sim = null;
+  try { controller?.destroy(); } catch (error) { console.error("Attack simulation: destroy() failed.", error); }
+  simRoot.innerHTML = "";
+  setBackgroundInert(false);
+  document.removeEventListener("keydown", simKeydown);
+  if (restoreFocus && openerKey) main.querySelector(`[data-key="${CSS.escape(openerKey)}"]`)?.focus({ preventScroll: true });
 }
 
-function slotTemplate(row, index) {
-  const inputs = fields.map((field) => `<div class="lab-field ${field.id === "initiative" || field.id === "goal" ? "wide" : "half"}"><label for="r${index}-${field.id}">${escapeHtml(field.label)}</label><input id="r${index}-${field.id}" data-row="${index}" data-field="${field.id}" maxlength="${maxFieldLength}" placeholder="${escapeHtml(field.example)}" value="${escapeHtml(row[field.id])}" autocomplete="off"></div>`).join("");
-  return `<fieldset class="map-slot"><legend>Initiative 0${index + 1} // <span id="slot-status-${index}">${slotStatus(row)}</span></legend><div class="field-grid">${inputs}${selectField(index, "timeline", "Timeline", timelines, row.timeline)}${selectField(index, "impact", "Impact", levels, row.impact)}${selectField(index, "effort", "Effort", levels, row.effort)}</div></fieldset>`;
+// Esc skips while running and closes when done; Tab stays inside the dialog.
+function simKeydown(event) {
+  if (!sim) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    if (sim.done) closeSimulation(); else skipSimulation();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const dialog = simRoot.querySelector('[role="dialog"]');
+  const focusable = [...dialog.querySelectorAll("button:not([disabled])")];
+  if (!focusable.length) {
+    event.preventDefault();
+    dialog.focus();
+    return;
+  }
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  const inside = dialog.contains(document.activeElement);
+  if (event.shiftKey && (!inside || document.activeElement === first)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (!inside || document.activeElement === last)) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
-function rankListTemplate() {
-  const ranked = rankRows(state.map.rows);
-  if (!ranked.length) return '<p class="rank-empty">Start an initiative and it will appear here, ranked.</p>';
-  return ranked.map((row, index) => `<div class="rank-item"><b>${index + 1}</b><div><strong>${escapeHtml(row.initiative.trim() || "Untitled initiative")}</strong><small><span class="priority-tag">${row.priority}</span> · Impact ${levelLabel(row.impact) || "?"} / Effort ${levelLabel(row.effort) || "?"} · ${timelineLabel(row.timeline) || "No timeline"}</small></div></div>`).join("");
+/* Render and events */
+
+const screens = [statScreen, briefingScreen, buildScreen, yearScreen, finishScreen];
+
+function render({ newScreen = false } = {}) {
+  // Full repaint drops focus, so remember the focused control by its data-key and restore it.
+  const focusKey = document.activeElement?.dataset?.key;
+  main.innerHTML = screens[state.screen]();
+  paintMeters(main);
+  if (state.screen === SCREEN.build) track("simulator", "started");
+  if (state.screen === SCREEN.finish) {
+    track("map", "started");
+    track("map", "completed");
+  }
+  if (newScreen) {
+    window.scrollTo({ top: 0, behavior: "instant" });
+    main.focus({ preventScroll: true });
+    return;
+  }
+  if (focusKey) main.querySelector(`[data-key="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
 }
 
-function paintMapConsole() {
-  const imported = state.sim.activated.length;
-  document.querySelector("#map-console").innerHTML = `<div class="briefing"><strong>Protocol 05 // Build your map.</strong> ${escapeHtml(buildIntro)}</div>${imported ? `<button class="suggestion" id="import-sim" type="button">Start from my simulator roadmap (${Math.min(imported, 3)} ${imported === 1 ? "initiative" : "initiatives"})</button>` : ""}<form id="map-form" novalidate>${state.map.rows.map(slotTemplate).join("")}</form>`;
+function goTo(screen) {
+  closeSimulation({ restoreFocus: false });
+  if (state.screen === SCREEN.briefing && state.seen.size === components.length) track("protocols", "completed");
+  state.screen = screen;
+  render({ newScreen: true });
 }
 
-function paintMapPanel() {
-  const passed = state.map.checkpointPassed;
-  const choices = passed ? mapCheckpoint.choices : shuffled(mapCheckpoint.choices);
-  const anyStarted = state.map.rows.some(isRowStarted);
-  document.querySelector("#map-panel").innerHTML = `<span class="step-label">Stack rank</span><h2>Your map, ranked.</h2><p>Highest impact first, then lowest effort. Start at the top and build credibility.</p><div class="rank-list" id="rank-list">${rankListTemplate()}</div>
-    <hr class="panel-divider"><span class="step-label">Final checkpoint</span><h3 class="checkpoint-question">${escapeHtml(mapCheckpoint.question)}</h3>
-    <div class="patches">${choices.map((choice) => `<label class="patch"><input type="radio" name="map-checkpoint" value="${choice.id}"${passed && choice.id === mapCheckpoint.correctId ? " checked" : ""}><span class="patch-content"><span class="patch-title">${escapeHtml(choice.label)}</span></span></label>`).join("")}</div>
-    <div class="feedback" id="feedback" role="status">Complete at least one initiative, answer the checkpoint, then lock in your map.</div>
-    <div class="actions"><button class="button" id="lock-map" type="button">Lock in map</button><button class="button secondary" id="print-map" type="button"${anyStarted ? "" : " disabled"}>Print my map</button></div>`;
+// After the simulation every attack has already landed, so the report opens fully revealed.
+function runYear({ revealAll = false } = {}) {
+  const { results, score, won } = runAll(state.plan);
+  // Reveal heaviest first; the sort is stable, so equal weights keep model order.
+  state.run = { results: [...results].sort((a, b) => byWeight(a.scenario, b.scenario)), score, won };
+  state.reveal = revealAll ? results.length : 1;
+  goTo(SCREEN.year);
 }
 
-function mapMission() {
-  return shell("map", `<div class="workspace map-workspace">${consoleBox("Commander's map // 30 · 60 · 90 · 180 · 360", "map-console")}<aside class="repair-panel" id="map-panel"></aside></div>`);
+function revealTo(count) {
+  state.reveal = Math.min(count, state.run.results.length);
+  render();
+  const target = state.reveal >= state.run.results.length ? main.querySelector(".run-summary") : main.querySelector(`#attack-${state.reveal - 1}`);
+  target?.scrollIntoView({ block: "nearest" });
 }
 
-function bindMap() {
-  lab = {};
-  paintMapConsole();
-  paintMapPanel();
-  const consoleBody = document.querySelector("#map-console");
-  const panel = document.querySelector("#map-panel");
-
-  const updateRow = (event) => {
-    const target = event.target.closest("[data-row][data-field]");
-    if (!target) return;
-    const index = Number(target.dataset.row);
-    const row = state.map.rows[index];
-    if (!row || !(target.dataset.field in row)) return;
-    row[target.dataset.field] = target.value.slice(0, maxFieldLength);
-    saveState();
-    document.querySelector(`#slot-status-${index}`).textContent = slotStatus(row);
-    document.querySelector("#rank-list").innerHTML = rankListTemplate();
-    document.querySelector("#print-map").disabled = !state.map.rows.some(isRowStarted);
-  };
-  consoleBody.addEventListener("input", updateRow);
-  consoleBody.addEventListener("change", updateRow);
-
-  consoleBody.addEventListener("click", (event) => {
-    if (!event.target.closest("#import-sim")) return;
-    if (state.map.rows.some(isRowStarted) && !window.confirm("Replace your current map with your simulator initiatives?")) return;
-    state.map.rows = sanitizeRows(rowsFromSimulation(activeScenario(), state.sim));
-    saveState();
-    paintMapConsole();
-    document.querySelector("#rank-list").innerHTML = rankListTemplate();
-    document.querySelector("#print-map").disabled = false;
-    notify("Simulator initiatives imported. Add metrics, timelines, impact, and effort.");
-  });
-
-  panel.addEventListener("click", (event) => {
-    if (event.target.closest("#print-map")) { printMap(); return; }
-    if (!event.target.closest("#lock-map")) return;
-    const feedback = document.querySelector("#feedback");
-    if (!state.map.rows.some(isRowComplete)) {
-      feedback.className = "feedback bad";
-      feedback.innerHTML = "<strong>Map incomplete.</strong><br>Fill in every field for at least one initiative, including timeline, impact, and effort.";
-      return;
-    }
-    const selected = document.querySelector('input[name="map-checkpoint"]:checked');
-    if (!selected) {
-      feedback.className = "feedback bad";
-      feedback.textContent = "Answer the final checkpoint before locking in your map.";
-      return;
-    }
-    const result = checkMapAnswer(selected.value);
-    if (!result.correct) {
-      feedback.className = "feedback bad";
-      feedback.innerHTML = `<strong>Checkpoint failed.</strong><br>${escapeHtml(result.hint)}<br><small>Choose again, then lock in your map.</small>`;
-      return;
-    }
-    state.map.checkpointPassed = true;
-    completeMission("map");
-    const actions = document.querySelector(".repair-panel .actions");
-    actions.insertAdjacentHTML("beforeend", '<button class="button secondary" id="print-map" type="button">Print my map</button>');
-  });
-}
-
-function printMap() {
-  const ranked = rankRows(state.map.rows);
-  if (!ranked.length) { notify("Add an initiative before printing."); return; }
-  printRoot.innerHTML = `<h1>AppSec Roadmap // Commander's Map</h1><p>${escapeHtml(academyConfig.event)} · ${escapeHtml(academyConfig.academy)} · ${escapeHtml(new Date().toLocaleDateString())}</p><p>${escapeHtml(buildIntro)}</p>
-    <table><thead><tr><th>#</th><th>Initiative</th><th>Goal / Outcome</th><th>Metric for success</th><th>Timeline</th><th>Investment</th><th>Impact / Effort</th><th>Priority</th></tr></thead><tbody>${ranked.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeHtml(row.initiative)}</td><td>${escapeHtml(row.goal)}</td><td>${escapeHtml(row.metric)}</td><td>${escapeHtml(timelineLabel(row.timeline))}</td><td>${escapeHtml(row.investment)}</td><td>${escapeHtml(levelLabel(row.impact))} / ${escapeHtml(levelLabel(row.effort))}</td><td>${escapeHtml(row.priority)}</td></tr>`).join("")}</tbody></table>
-    <p>Checkpoint at 90 days and adjust. Re-evaluate at 360 days by rerunning Protocol 01: Define.</p>`;
-  window.print();
-}
-
-/* Completion, reset, routing */
-
-function completionTemplate() {
-  const anyStarted = state.map.rows.some(isRowStarted);
-  return `<section class="completion"><div class="completion-card" role="dialog" aria-modal="true" aria-labelledby="completion-title"><img class="completion-logo" src="${academyConfig.assets.logo}" alt="OWASP space logo"><p class="eyebrow">Qualification confirmed</p><h1 id="completion-title">Welcome, <span>Commander.</span></h1><p>You learned the four parts of an AppSec program, tested a funded roadmap against five incidents, and ranked a plan for your own organization. Tools do not make a program. Decisions do.</p><div class="lessons"><span>Know your why before you buy anything</span><span>Protect the capacity of the people who scale security</span><span>Prioritize by reachability and exploit context</span><span>Fund the foundations that make your tools work</span><span>Measure what drives action</span><span>Stack-rank by impact vs. effort, and finish what you start</span></div><div class="ctf-award"><span>Hackers Challenge CTF token</span><code id="ctf-token">${escapeHtml(academyConfig.ctfToken)}</code><button class="button" id="copy-token" type="button">Copy token</button></div><div class="actions completion-actions">${anyStarted ? '<button class="button secondary" id="print-completion" type="button">Print my map</button>' : ""}<button class="button secondary" id="reset-completion" type="button">Reset session</button></div></div></section>`;
-}
-
-function bindCompletion() {
-  document.querySelector("#copy-token").addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(academyConfig.ctfToken);
-    } catch {
-      const range = document.createRange();
-      range.selectNodeContents(document.querySelector("#ctf-token"));
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand("copy");
-      selection.removeAllRanges();
-    }
-    document.querySelector("#copy-token").textContent = "Copied!";
+async function copyToken(button) {
+  try {
+    await navigator.clipboard.writeText(CTF_TOKEN);
+    button.textContent = "Copied!";
     notify("CTF token copied.");
-  });
-  document.querySelector("#print-completion")?.addEventListener("click", printMap);
-  document.querySelector("#reset-completion").addEventListener("click", () => resetSession(false));
+  } catch {
+    // No clipboard permission: select the token so the player can copy it by hand.
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector("#ctf-token"));
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    notify("Token selected. Press Ctrl+C or ⌘C to copy.");
+  }
 }
 
-function resetSession(confirmReset = true) {
-  if (confirmReset && !window.confirm("Reset all three academy missions and clear your map?")) return;
-  state = emptyState();
-  lab = {};
-  try { localStorage.removeItem(academyConfig.storageKey); } catch { /* nothing stored */ }
-  resetActivityIdentity();
-  printRoot.innerHTML = "";
-  window.location.hash = "#/";
-  window.location.reload();
+// Hidden by default so players try first. Each line is backed by the exhaustive balance check.
+function hintTemplate() {
+  const body = state.hint ? `<ul class="hint-box" id="hint-box">
+      <li>Do program work early, in Q1 and Q2, so your tools land at full strength.</li>
+      <li>Cover the Likely attacks first. You can't cover all six.</li>
+      <li>Every winning roadmap includes "Build your application inventory".</li>
+    </ul>` : "";
+  return `<div class="hint"><button class="button secondary hint-toggle" type="button" data-action="hint" data-key="hint" aria-expanded="${state.hint}" aria-controls="hint-box">${state.hint ? "Hide hint" : "Get a hint"}</button>${body}</div>`;
 }
 
-function route() {
-  const path = window.location.hash || "#/";
-  lab = {};
-  if (path === "#/complete" && state.complete.length === missionIds.length) {
-    main.innerHTML = completionTemplate();
-    bindCompletion();
-  } else if (path.startsWith("#/mission/")) {
-    const id = path.split("/").pop();
-    const index = missionIds.indexOf(id);
-    if (index < 0 || (index > 0 && !isComplete(missionIds[index - 1]))) { window.location.hash = "#/"; return; }
-    if (id === "protocols") { main.innerHTML = protocolsMission(); bindProtocols(); }
-    if (id === "simulator") { main.innerHTML = simulatorMission(); bindSimulator(); }
-    if (id === "map") { main.innerHTML = mapMission(); bindMap(); }
-    recordActivity("commander", id, "started");
-  } else main.innerHTML = homeTemplate();
-  window.scrollTo({ top: 0, behavior: "instant" });
-}
+const actions = {
+  hint() { state.hint = !state.hint; render(); },
+  open(target) {
+    const { id } = target.dataset;
+    state.seen.add(id);
+    if (state.expanded.has(id)) state.expanded.delete(id); else state.expanded.add(id);
+    render();
+  },
+  go(target) { goTo(Number(target.dataset.to)); },
+  back() { goTo(state.screen - 1); },
+  place(target) {
+    const { id } = target.dataset;
+    const quarter = Number(target.dataset.q);
+    if (state.plan[id] === quarter) delete state.plan[id];
+    else if (fits(state.plan, id, quarter)) state.plan[id] = quarter;
+    render();
+  },
+  "toggle-group"(target) {
+    const { id } = target.dataset;
+    if (state.openGroups.has(id)) state.openGroups.delete(id); else state.openGroups.add(id);
+    render();
+  },
+  run(target) { if (Object.keys(state.plan).length) openSimulation(target); },
+  "sim-skip"() { skipSimulation(); },
+  "sim-back"() { closeSimulation(); },
+  "sim-report"() { runYear({ revealAll: true }); },
+  "next-attack"() { revealTo(state.reveal + 1); },
+  "show-all"() { revealTo(state.run.results.length); },
+  adjust() { goTo(SCREEN.build); },
+  finish() { goTo(SCREEN.finish); },
+  copy(target) { copyToken(target); },
+  // A fresh start is a fresh participant: drop the tracker identity, then reload.
+  restart() {
+    resetActivityIdentity();
+    window.location.reload();
+  }
+};
 
-document.querySelector("#reset-progress").addEventListener("click", () => resetSession(true));
 document.addEventListener("click", (event) => {
-  const curriculumLink = event.target.closest('a[href="#curriculum"]');
-  if (!curriculumLink) return;
-  event.preventDefault();
-  document.querySelector("#curriculum")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const target = event.target.closest("[data-action]");
+  if (!target || target.disabled) return;
+  // While the simulation is open, only its own controls act, so the roadmap never repaints under it.
+  if (sim && !simRoot.contains(target)) return;
+  actions[target.dataset.action]?.(target);
 });
-window.addEventListener("hashchange", route);
-applyTheme();
-route();
+
+track("protocols", "started");
+render();
