@@ -318,7 +318,7 @@ function deliveryLine(status) {
   // "(of 70%)" only when the control falls short of its rating once rounded.
   const cut = (share) => `${formatPercent(share)}${formatPercent(share) === formatPercent(status.rated) ? "" : ` (of a possible ${formatPercent(status.rated)})`}`;
   const lead = level === 0
-    ? `If funded now: would cut loss from ${threat} by ${cut(status.rated * status.factor * shippedFactor(scenario, initiative, status.category))} at full strength.`
+    ? `If funded now: would cut loss from ${threat} by ${cut(status.rated * status.factor * shippedFactor(scenario, initiative, status.category))} once fully ramped.`
     : `${status.posture === "partial" && !status.funded ? "As is (partial), by" : "By"} month ${scenario.months}: cuts loss from ${threat} by ${cut(status.delivered)}.`;
   return `<span class="delivery${status.missing.length ? " short" : ""}">${lead}${missing}${ramping}${newCodeOnly}</span>`;
 }
@@ -411,7 +411,7 @@ function leverTemplate(scenario, roadmap, category) {
   if (!best) return "";
   const verb = postureOf(scenario, best.initiative.id) === "partial" ? "Upgrade" : "Fund";
   const missing = best.missing.length ? `; missing ${escapeHtml(listJoin(best.missing.map((item) => item.initiative.short)))}` : "";
-  const when = best.start === null ? "doesn't fit your remaining budget and eng-weeks" : `fits from ${startPhrase(best.start)}`;
+  const when = best.start === null ? "doesn't fit your remaining budget and engineer-weeks" : `fits from ${startPhrase(best.start)}`;
   const blocked = fitting.length && options[0] !== best ? ` (${escapeHtml(options[0].initiative.short)}, up to ${formatPercent(options[0].share)}, no longer fits)` : "";
   return `<span class="lever"><b>${best.start === null ? "Biggest lever" : "Biggest lever that fits"}:</b> ${verb} ${escapeHtml(best.initiative.short)} (cuts up to ${formatPercent(best.share)}${missing}) · ${when}${blocked}</span>`;
 }

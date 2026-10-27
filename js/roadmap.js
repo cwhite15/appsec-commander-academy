@@ -109,7 +109,7 @@ export function rowsFromSimulation(scenario, roadmapInput) {
       ...emptyRow(),
       initiative: `${upgrade ? "Upgrade existing " : ""}${initiative.name}`,
       goal: initiative.description,
-      investment: `$${cost.budget}K and ${Math.round(cost.weeks)} engineer-weeks, starting ${start === 0 ? "now" : `after ${start} months`}`,
+      investment: `$${cost.budget}K and ${Math.round(cost.weeks)} engineer-weeks, starting ${start === 0 ? "now" : `in month ${start + 1}`}`,
       timeline: timelineForStart[start] ?? ""
     };
   });

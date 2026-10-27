@@ -508,7 +508,7 @@ test("simulator roadmaps seed the map with start-based timelines, upgrades, and 
   assert.equal(rows[0].investment, "$6K and 3 engineer-weeks, starting now");
   assert.equal(rows[0].timeline, "30");
   assert.equal(rows[1].initiative, "Incident Response Plan");
-  assert.equal(rows[1].investment, "$6K and 4 engineer-weeks, starting after 3 months");
+  assert.equal(rows[1].investment, "$6K and 4 engineer-weeks, starting in month 4");
   assert.equal(rows[1].timeline, "90");
   assert.equal(rows[2].initiative, "Inventory, Risk Classification & Coverage Metrics");
   assert.equal(rows[0].metric, "");
