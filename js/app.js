@@ -2,6 +2,7 @@
 // and delegated clicks. Every game number comes from model.js, so the UI never
 // repeats a cost, cap, or cut.
 import { components, resources, initiatives, scenarios, WIN_BAR, byId, spend, fits, missingFoundations, runAll } from "./model.js";
+import { installIdleReset } from "./idle-reset.js";
 import { recordActivity, resetActivityIdentity } from "./tracker.js";
 import { academyConfig } from "./config.js";
 
@@ -703,3 +704,4 @@ document.addEventListener("click", (event) => {
 
 track("protocols", "started");
 render();
+installIdleReset(() => actions.restart());

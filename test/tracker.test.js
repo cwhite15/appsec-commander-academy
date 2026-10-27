@@ -30,6 +30,10 @@ test("reset progress clears tracker identity and reloads", () => {
   assert.match(appClient, /window\.location\.reload\(\)/);
 });
 
+test("five minutes of inactivity starts the same full session reset", () => {
+  assert.match(appClient, /installIdleReset\(\(\) => actions\.restart\(\)\)/);
+});
+
 test("allows the production tracker in local and nginx CSP headers", () => {
   assert.match(nginx, /connect-src 'self' https:\/\/appsec\.community/);
   assert.match(server, /connect-src 'self' https:\/\/appsec\.community/);
