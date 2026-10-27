@@ -80,6 +80,15 @@ The briefing panel has a **"Where this mission fits"** box, and the after-action
   - The game's dollar figures are illustrative. Insurers' claims data puts real insured losses far lower (see `research/` in the workspace), so don't present them as expected annual losses.
 - **Not changed:** the score, the registers and the balance.
 
+#### Lens bar and the Whole organization view (`lens-toggle` branch only)
+
+On the briefing, above the company cards, a lens bar offers two tabs: **Application & platform** (this mission, the default) and **Whole organization** (read-only).
+
+- **Whole organization** swaps the company cards for a portfolio of six programs: application and platform security (highlighted, this mission), vulnerability and patch management for vendor and edge products, identity and access, email and people, third-party risk, and detection and response. Each row shows what it covers, its DBIR breach figures, how strong the evidence is that its controls reduce incidents, and whether the academy covers it. It's the same for every company and shows no company-specific numbers.
+- **Figures on it** are the ones above (31%, 16%, 13%, 6%; third party 48%; ransomware 48%; VPN and edge devices 22% of exploitation in the 2025 DBIR), plus a human element in 62% of 2026 breaches, MFA cutting account-compromise risk by 99.22% (Microsoft, Meyer et al. 2023; vendor, observational) and two Marsh McLennan 2023 claims signals: patching high-severity CVEs within 7 days (2.19, about 54% lower likelihood) and phishing tests at least yearly (1.76, about 43% lower). The "lower" percentages are 1 − 1/signal strength, our arithmetic. Marsh considered each control in isolation, so don't combine them.
+- **Coaching:** the DBIR shares are industry-wide and overlap, so they don't add to 100%. Use the view to answer "what about phishing or ransomware?": this mission's roadmap is one funded program among peers.
+- **Rules:** only the Application & platform lens plays the game. Switching lens never touches the roadmap, the score or the Mission 03 import. The "Switch to Application & platform to play" button returns to the company cards.
+
 #### How a roadmap is scored
 
 - **Risk register.** Every company rates all 14 threats with a likelihood. **Likelihood is the chance the incident happens at full impact within the company's timeline, not the chance that the weakness exists.** (A 0.55 for a secret leak at OrbitPay doesn't mean "a 55% chance a key ever leaks"; that is near-certain. It means a 55% chance of a leak that costs the full $230K within six months.) The same definition is on screen.

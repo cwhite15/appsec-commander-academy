@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { checkAnswer, descriptionBlocks, protocols, totalCommands } from "../js/protocols.js";
 import { assessIncident, biggestFix, canPlace, controlStatus, costOf, deliveredFor, deliveredShareAt, earliestStart, expectedLoss, findScenario, foundationFactor, formatImpact, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsFor, mitigationFor, optionCost, passingReadiness, penalties, phasesFor, registerFor, runSimulation, sanitizeRoadmap, scenarios, scoreRoadmap, scoreWeights, startsFor, strengthenOptions, tiers, totals, validRunMode, withinResources } from "../js/simulation.js";
 import { difficultyOf, foundationIds, proveBestWithoutFoundations, score, searchContext } from "../scripts/roadmaps.mjs";
-import { breachRoutes, categoryOf, riskCategories } from "../js/context.js";
+import { breachRoutes, categoryOf, evidenceGrades, lenses, programs, riskCategories, validLens } from "../js/context.js";
 import { readFileSync } from "node:fs";
 import { checkMapAnswer, checkpoint, isRowComplete, maxFieldLength, rankRows, readyToLock, rowsFromSimulation, sanitizeRows } from "../js/roadmap.js";
 
@@ -531,4 +531,38 @@ test("every threat sits in exactly one scope category, and the guide's breach ro
   const total = register.reduce((sum, row) => sum + row.inherent, 0);
   const share = (id) => Math.round((100 * register.filter((row) => categoryOf(row.incident.id).id === id).reduce((sum, row) => sum + row.inherent, 0)) / total);
   assert.deepEqual(["identity", "code", "cloud", "deps", "response", "avail"].map(share), [32, 31, 23, 8, 4, 1]);
+});
+
+test("the portfolio's programs are one canonical list, and every DBIR figure agrees with the breach routes", () => {
+  assert.deepEqual(programs.map((program) => program.label), ["Application & platform security", "Vulnerability & patch management (vendor, edge)", "Identity & access", "Email & people", "Third-party risk", "Detection & response"]);
+  assert.equal(new Set(programs.map((program) => program.id)).size, programs.length);
+  const routeIds = breachRoutes.routes.map((route) => route.id);
+  // The only figures allowed on screen: the 2026 routes and totals, plus the 2025 edge-device share already in the exploitation note.
+  const allowed = new Set([...breachRoutes.routes.map((route) => route.share), breachRoutes.thirdParty, breachRoutes.ransomware, breachRoutes.humanElement, 22]);
+  assert.ok(breachRoutes.routes.find((route) => route.id === "exploit").note.includes("22% of exploitation in the 2025 DBIR"));
+  for (const program of programs) {
+    for (const id of program.routes) {
+      assert.ok(routeIds.includes(id), `${program.id}: unknown route ${id}`);
+      assert.ok(program.dbir.includes(`${breachRoutes.routes.find((route) => route.id === id).share}%`), `${program.id} shows ${id}`);
+    }
+    for (const figure of program.dbir.match(/\d+(?=%)/g) || []) assert.ok(allowed.has(Number(figure)), `${program.id}: ${figure}% is not a breach-route value`);
+    for (const field of ["label", "covers", "dbir", "status"]) assert.ok(program[field], `${program.id}.${field}`);
+  }
+  assert.ok(programs.find((program) => program.id === "third").dbir.includes(`${breachRoutes.thirdParty}%`));
+  assert.ok(programs.find((program) => program.id === "response").dbir.includes(`${breachRoutes.ransomware}%`));
+  assert.equal(programs.filter((program) => program.status === "This mission").map((program) => program.id).join(), "appsec");
+});
+
+test("every program has a graded, sourced evidence summary from the fixed set", () => {
+  assert.deepEqual(evidenceGrades, ["Strong", "Moderate", "Weak"]);
+  for (const { id, evidence } of programs) {
+    assert.ok(evidenceGrades.includes(evidence.grade), `${id}: ${evidence.grade}`);
+    assert.ok(evidence.summary && evidence.source, id);
+  }
+});
+
+test("the lens defaults to the game and falls back to it for anything unknown", () => {
+  assert.deepEqual(lenses.map((lens) => lens.id), ["appsec", "org"]);
+  assert.equal(validLens("org"), "org");
+  for (const value of [undefined, null, "", "planned", 3, {}]) assert.equal(validLens(value), "appsec");
 });

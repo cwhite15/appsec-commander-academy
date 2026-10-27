@@ -1,7 +1,7 @@
 import { academyConfig } from "./config.js";
 import { checkAnswer, descriptionBlocks, findProtocol, protocols, totalCommands } from "./protocols.js";
 import { assessIncident, biggestFix, canPlace, controlStatus, deliveredShareAt, earliestStart, expectedLoss, findInitiative, findScenario, formatCoverage, effectivenessOf, formatImpact, formatPercent, foundationFactor, fullStrengthMonth, groups, helpfulInitiatives, impactOf, incidentRun, incidents, initiatives, landingMonth, levelAt, levelsAt, likelihoodDefinition, missingFoundations, optionCost, passingReadiness, penalties, phasesFor, postureOf, registerFor, runModes, sanitizeRoadmap, scenarios, scoreRoadmap, shippedFactor, startOf, startsFor, strengthenOptions, summarizeRun, supportedBy, totals, validRunMode, withinResources } from "./simulation.js";
-import { breachRoutes, categoryOf, riskCategories } from "./context.js";
+import { breachRoutes, categoryOf, defaultLens, lenses, marshCaveat, programs, riskCategories, validLens } from "./context.js";
 import { buildIntro, checkMapAnswer, checkpoint as mapCheckpoint, fields, isRowComplete, isRowStarted, levels, maxFieldLength, rankRows, rowsFromSimulation, sanitizeRows, timelines } from "./roadmap.js";
 import { recordActivity, resetActivityIdentity } from "./tracker.js";
 
@@ -15,7 +15,7 @@ const missionMeta = {
   map: { number: "03", glyph: "⬡", title: "The Commander's Map", skill: "Roadmap planning", summary: "Turn what you learned into a stack-ranked plan you can take back to work.", objective: "Plan at least one complete initiative, let the map rank itself by impact and effort, and pass the final checkpoint to lock it in.", takeaway: "Stack-rank by impact vs. effort, and finish what you start." }
 };
 
-const emptyState = () => ({ complete: [], protocols: [], sim: { scenarioId: null, activated: [], starts: {}, runMode: runModes[0].id }, map: { rows: sanitizeRows([]), checkpointPassed: false } });
+const emptyState = () => ({ lens: defaultLens, complete: [], protocols: [], sim: { scenarioId: null, activated: [], starts: {}, runMode: runModes[0].id }, map: { rows: sanitizeRows([]), checkpointPassed: false } });
 let state = loadState();
 let lab = {};
 
@@ -26,6 +26,7 @@ function loadState() {
     const scenario = findScenario(saved.sim?.scenarioId);
     const roadmap = sanitizeRoadmap(scenario, saved.sim);
     return {
+      lens: validLens(saved.lens),
       complete: Array.isArray(saved.complete) ? missionIds.filter((id) => saved.complete.includes(id)) : [],
       protocols: Array.isArray(saved.protocols) ? protocols.map((protocol) => protocol.id).filter((id) => saved.protocols.includes(id)) : [],
       sim: { scenarioId: scenario ? scenario.id : null, activated: roadmap.activated, starts: roadmap.starts, runMode: validRunMode(saved.sim?.runMode) },
@@ -278,11 +279,37 @@ function simulatorMission() {
   return shell("simulator", `<div class="workspace" id="sim-workspace">${consoleBox("Roadmap simulator // assess · fund · survive", "sim-console")}<aside class="repair-panel" id="sim-panel"></aside></div>`);
 }
 
+// The lens bar: which slice of a company's risk the briefing shows. Tabs, so screen readers announce the choice.
+function lensBarTemplate() {
+  const tabs = lenses.map((lens) => {
+    const selected = lens.id === state.lens;
+    return `<button type="button" role="tab" id="lens-tab-${lens.id}" class="lens-tab${selected ? " active" : ""}" data-lens="${lens.id}" aria-selected="${selected}" aria-controls="lens-view" tabindex="${selected ? 0 : -1}"><b>${escapeHtml(lens.label)}</b><small>${escapeHtml(lens.status)}</small></button>`;
+  }).join("");
+  return `<div class="lens-bar" role="tablist" aria-label="Choose a lens on the company's risk">${tabs}</div>`;
+}
+
+const lensView = (content) => `${lensBarTemplate()}<div id="lens-view" role="tabpanel" aria-labelledby="lens-tab-${state.lens}">${content}</div>`;
+
 function briefingTemplate() {
+  if (state.lens === "org") return portfolioTemplate();
   const cards = scenarios.map((scenario) => `<button type="button" class="scenario-card" data-scenario="${scenario.id}"><span class="skill-tag">${escapeHtml(scenario.tagline)}</span><h3>${escapeHtml(scenario.name)}</h3><p>${escapeHtml(scenario.description)}</p><span class="posture-story"><b>Today:</b> ${escapeHtml(scenario.postureStory)}</span><span class="stat-row"><span>Timeline <b>${scenario.months} months</b></span><span>Budget <b>$${scenario.budget}K</b></span><span>Team time <b>${scenario.engineerWeeks} eng-weeks</b> (≈${peopleOf(scenario)} people full-time)</span></span><span class="staffing">${escapeHtml(scenario.staffing)}</span></button>`).join("");
   return {
-    console: `<div class="briefing"><strong>Assignment:</strong> Choose a company, assess what it already runs, and fund a roadmap against its risk register, then live through one possible timeline of incidents.</div><div class="scenario-grid">${cards}</div>`,
+    console: lensView(`<div class="briefing"><strong>Assignment:</strong> Choose a company, assess what it already runs, and fund a roadmap against its risk register, then live through one possible timeline of incidents.</div><div class="scenario-grid">${cards}</div>`),
     panel: `<span class="step-label">Commander's brief</span><h2>You cannot fund everything.</h2><p>Each company is its own scenario, with a risk register of ${incidents.length} threats. A threat's likelihood times its impact is its expected loss.</p><p class="definition">${escapeHtml(likelihoodDefinition)}</p><p>Every company already runs some controls, some of them only partly. Fund new controls, upgrade partial ones, and mind the foundations: a scanner with nobody to fix its findings delivers a fraction of what it promises.</p><p>Controls take time. Each one ramps up over months after it starts, and engineer-weeks are budgeted by phase, so you can't start everything at once. Your score is the share of the company's inherent expected loss that its controls remove, what already runs plus what you fund: half for the loss avoided during the timeline, half for the risk you hand over at the end.</p><div class="protocol-list"><span>Read the risk drivers and the starting posture</span><span>Fund or upgrade controls, and choose when each one starts</span><span>Remove at least ${passingReadiness}% of the register's expected loss</span></div>${scopeTemplate()}<div class="feedback" id="feedback">Choose a company to begin.</div><div class="actions"></div>`
+  };
+}
+
+// The Whole organization lens: read-only, the same for every company, and no company-specific numbers. It
+// replaces the company cards, so nothing on it can start the game, complete the mission or feed Mission 03.
+function portfolioTemplate() {
+  const rows = programs.map((program) => {
+    const current = program.id === "appsec";
+    const { grade, qualifier, summary, source } = program.evidence;
+    return `<li class="program${current ? " current" : ""}"><div class="program-head"><h3>${escapeHtml(program.label)}</h3><em class="program-status${current ? " current" : ""}">${escapeHtml(program.status)}</em></div><p class="program-covers">${escapeHtml(program.covers)}</p><dl class="program-facts"><div><dt>Breaches (DBIR)</dt><dd>${escapeHtml(program.dbir)}</dd></div><div><dt>Evidence its controls work</dt><dd><span class="grade grade-${grade.toLowerCase()}">${escapeHtml(grade)}</span>${qualifier ? ` <small>${escapeHtml(qualifier)}</small>` : ""} ${escapeHtml(summary)} <small class="program-source">${escapeHtml(source)}</small></dd></div></dl></li>`;
+  }).join("");
+  return {
+    console: lensView(`<div class="briefing"><strong>Whole organization:</strong> security is a portfolio of programs. This mission's roadmap is one funded program, application and platform security, among peers that each hold their own budget and their own risk.</div><ol class="programs">${rows}</ol>`),
+    panel: `<span class="step-label">Reading the portfolio</span><h2>One program among peers.</h2><p>This view is read-only and the same for every company. To play the mission, switch back to the application and platform lens and choose a company.</p><div class="scope-note"><p><b>Breaches (DBIR)</b> are industry-wide shares of breaches from the ${escapeHtml(breachRoutes.source)}, not any one company's risk. A breach can count under several routes, so the figures overlap and don't add up to 100%.</p><p><b>Evidence grades</b> describe how strong the evidence is that a program's controls reduce incidents, not how big the risk is.</p><p><b>Marsh claims data:</b> ${escapeHtml(marshCaveat)}</p></div><div class="actions"><button class="button" type="button" data-lens="appsec">Switch to Application &amp; platform to play →</button></div>`
   };
 }
 
@@ -707,6 +734,8 @@ function startRun(mode) {
 
 function bindSimulator() {
   lab = { phase: activeScenario() ? "build" : "briefing", index: 0, results: [], revealed: false, assessing: false, closedGroups: new Set(), openDetails: new Set() };
+  // A company in play means the game lens: only it can complete the mission and feed Mission 03.
+  if (activeScenario()) state.lens = defaultLens;
   const workspace = document.querySelector("#sim-workspace");
   paintSimulator();
 
@@ -758,7 +787,29 @@ function bindSimulator() {
     else lab.closedGroups.add(group);
   }, true);
 
+  // Switching lens changes only state.lens; the roadmap in state.sim is never touched.
+  const setLens = (id) => {
+    state.lens = validLens(id);
+    saveState();
+    paintSimulator(`#lens-tab-${state.lens}`);
+  };
+
+  // Tabs pattern: Left and Right move between lenses, Home and End jump to the ends.
+  workspace.addEventListener("keydown", (event) => {
+    if (lab.phase !== "briefing" || !event.target.closest('[role="tab"][data-lens]')) return;
+    const index = lenses.findIndex((lens) => lens.id === state.lens);
+    const next = { ArrowRight: index + 1, ArrowLeft: index - 1, Home: 0, End: lenses.length - 1 }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    setLens(lenses[(next + lenses.length) % lenses.length].id);
+  });
+
   workspace.addEventListener("click", async (event) => {
+    const lensButton = event.target.closest("[data-lens]");
+    if (lensButton && lab.phase === "briefing") {
+      if (lensButton.dataset.lens !== state.lens) setLens(lensButton.dataset.lens);
+      return;
+    }
     const scenarioCard = event.target.closest("[data-scenario]");
     if (scenarioCard) {
       state.sim = { ...state.sim, scenarioId: scenarioCard.dataset.scenario, activated: [], starts: {} };
