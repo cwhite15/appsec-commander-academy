@@ -694,6 +694,12 @@ const actions = {
   }
 };
 
+function returnToCommunity(event) {
+  event.preventDefault();
+  resetActivityIdentity();
+  window.location.assign("/");
+}
+
 document.addEventListener("click", (event) => {
   const target = event.target.closest("[data-action]");
   if (!target || target.disabled) return;
@@ -701,6 +707,7 @@ document.addEventListener("click", (event) => {
   if (sim && !simRoot.contains(target)) return;
   actions[target.dataset.action]?.(target);
 });
+document.querySelector(".brand").addEventListener("click", returnToCommunity);
 
 track("protocols", "started");
 render();

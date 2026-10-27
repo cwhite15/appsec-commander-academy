@@ -34,6 +34,11 @@ test("five minutes of inactivity starts the same full session reset", () => {
   assert.match(appClient, /installIdleReset\(\(\) => actions\.restart\(\)\)/);
 });
 
+test("academy logo clears the participant session before returning to the portal", () => {
+  assert.match(appClient, /document\.querySelector\("\.brand"\)\.addEventListener\("click", returnToCommunity\)/);
+  assert.match(appClient, /resetActivityIdentity\(\);\s*window\.location\.assign\("\/"\)/);
+});
+
 test("allows the production tracker in local and nginx CSP headers", () => {
   assert.match(nginx, /connect-src 'self' https:\/\/appsec\.community/);
   assert.match(server, /connect-src 'self' https:\/\/appsec\.community/);
