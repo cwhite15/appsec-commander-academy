@@ -1106,9 +1106,11 @@ function wrapWordsWith(ctx, text, width) {
   return lines;
 }
 
+// Floors with the same float guard as percent() in app.js, so the canvas never shows
+// "RISK CUT 48%" for an attack the report lists as 47%.
 function outcomeText(shot) {
   if (shot.outcome === "prevented") return "PREVENTED";
-  if (shot.outcome === "reduced") return `RISK CUT ${Math.round(clamp(shot.reduction, 0, 1) * 100)}%`;
+  if (shot.outcome === "reduced") return `RISK CUT ${Math.floor(clamp(shot.reduction, 0, 1) * 100 + 1e-6)}%`;
   return "UNPROTECTED";
 }
 

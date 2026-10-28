@@ -29,11 +29,12 @@ const state = { screen: SCREEN.stat, seen: new Set(), expanded: new Set(), openG
 
 /* Helpers */
 
-// Spelled out because it starts a sentence; follows the model's scenario count.
-function attackCountWord() {
+// Spelled out because it can start a sentence; callers pass a count from the model.
+function countWord(count) {
   const words = ["No", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"];
-  return words[scenarios.length] || String(scenarios.length);
+  return words[count] || String(count);
 }
+const attackCountWord = () => countWord(scenarios.length);
 
 function escapeHtml(value) {
   return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
@@ -43,6 +44,10 @@ function escapeHtml(value) {
 function paintMeters(root = document) {
   root.querySelectorAll("[data-meter]").forEach((element) => {
     element.style.width = `${Math.max(0, Math.min(100, Number(element.dataset.meter) || 0))}%`;
+  });
+  // Labels and markers that sit at a point along a meter, also through the CSSOM.
+  root.querySelectorAll("[data-at]").forEach((element) => {
+    element.style.left = `${Math.max(0, Math.min(100, Number(element.dataset.at) || 0))}%`;
   });
 }
 
@@ -132,7 +137,7 @@ function navTemplate() {
 
 // Screens 3 and 4 share the live Mission 02 shell and its Resource Gauntlet art.
 function stageShell(header, content) {
-  return `<div class="mission-stage mission-stage-simulator"><section class="mission-shell">${navTemplate()}<header class="mission-header"><div>${header}</div><span class="classification">Commander clearance</span></header>${content}</section></div>`;
+  return `<div class="mission-stage mission-stage-simulator"><section class="mission-shell">${navTemplate()}<header class="mission-header"><div>${header}</div></header>${content}</section></div>`;
 }
 
 /* Screen 1: the four components */
@@ -140,7 +145,7 @@ function stageShell(header, content) {
 function briefingScreen() {
   const cards = components.map((component) => {
     const open = state.expanded.has(component.id);
-    const hint = open ? "Tap to close" : state.seen.has(component.id) ? "Opened · tap to reread" : "Tap to open";
+    const hint = open ? "Close" : state.seen.has(component.id) ? "Opened · read again" : "Open";
     return `<button class="component-card accent-${escapeHtml(component.id)}${open ? " open" : ""}${state.seen.has(component.id) ? " seen" : ""}" type="button" data-action="open" data-id="${escapeHtml(component.id)}" data-key="open-${escapeHtml(component.id)}" aria-expanded="${open}">
       <span class="component-number">${escapeHtml(component.number)}</span>
       <span class="component-title">${escapeHtml(component.title)}</span>
@@ -150,12 +155,15 @@ function briefingScreen() {
     </button>`;
   }).join("");
   const ready = state.seen.size === components.length;
+  // Continue stays disabled until every card is opened, so the count says why.
+  const opened = `${state.seen.size} of ${components.length} opened`;
+  const count = ready ? opened : `Open all ${countWord(components.length).toLowerCase()} to continue · ${opened}`;
   return `<div class="path-nav-wrap">${navTemplate()}</div>
     <section class="path-header"><p class="eyebrow">Phase 2 · Briefing</p><h1>Four parts <span>of a program</span></h1><p class="lede">One practical way to organize an AppSec program. Open all four before you build your roadmap.</p></section>
     <section class="path-section">
       <div class="component-grid">${cards}</div>
       <p class="path-note">Every initiative on your roadmap sits under one of these four parts.</p>
-      <div class="path-actions"><span class="path-count">${state.seen.size} of ${components.length} opened</span><button class="button" type="button" data-action="go" data-to="${SCREEN.build}" data-key="continue"${ready ? "" : " disabled"}>Continue →</button></div>
+      <div class="path-actions"><span class="path-count">${escapeHtml(count)}</span><button class="button" type="button" data-action="go" data-to="${SCREEN.build}" data-key="continue"${ready ? "" : " disabled"}>Continue →</button></div>
     </section>`;
 }
 
@@ -201,8 +209,12 @@ function statScreen() {
 
 /* Screen 3: build the roadmap */
 
+// Shown beside a disabled Run button, so an empty plan explains itself.
+const RUN_HINT = "Place a card to run";
+
 function resourceBar(used) {
   const left = resources.budgetK - used.budgetK;
+  const empty = !Object.keys(state.plan).length;
   const quarters = resources.fte.map((cap, index) => {
     const full = used.fte[index] >= cap - 1e-9;
     return `<div class="resource res-q"><div class="resource-head"><span>${escapeHtml(quarterName(index))}</span><strong>${fteLabel(used.fte[index])}/${fteLabel(cap)}</strong></div><div class="meter${full ? " capped" : ""}"><i data-meter="${percentOf(used.fte[index], cap)}"></i></div></div>`;
@@ -210,7 +222,7 @@ function resourceBar(used) {
   return `<div class="res-bar" role="region" aria-label="Resources">
     <div class="resource res-budget"><div class="resource-head"><span>Budget left</span><strong>$${left}K / $${resources.budgetK}K</strong></div><div class="meter${left <= 0 ? " capped" : ""}"><i data-meter="${percentOf(left, resources.budgetK)}"></i></div></div>
     <div class="res-team"><span class="res-label">Team per quarter · FTE used / cap</span><div class="res-fte">${quarters}</div></div>
-    <button class="button" type="button" data-action="run" data-key="run-bar"${Object.keys(state.plan).length ? "" : " disabled"}>Run end-of-year attack simulation</button>
+    <div class="res-run">${empty ? `<span class="run-hint">${RUN_HINT}</span>` : ""}<button class="button" type="button" data-action="run" data-key="run-bar"${empty ? " disabled" : ""}>Run end-of-year attack simulation</button></div>
   </div>`;
 }
 
@@ -254,7 +266,10 @@ function initiativeCard(item, used) {
   let reason = "";
   if (blocked.length) {
     const overBudget = blocked.find((entry) => entry.reason.startsWith("Over budget"));
-    reason = overBudget ? overBudget.reason : `Not enough team in ${joinNames(blocked.map((entry) => quarterName(entry.quarter)))} (needs ${fteLabel(item.fte)} FTE)`;
+    const quarters = joinNames(blocked.map((entry) => quarterName(entry.quarter)));
+    // A built card is only being moved, so say so; otherwise it reads like a fault in the plan.
+    const team = isPlaced ? `Can't move to ${quarters}: not enough team` : `Not enough team in ${quarters}`;
+    reason = overBudget ? overBudget.reason : `${team} (needs ${fteLabel(item.fte)} FTE)`;
   }
   const needs = (item.needs || []).map(nameOf);
   const unlocks = item.foundation ? unlocksOf(item.id).map((entry) => entry.name) : [];
@@ -298,10 +313,10 @@ function buildScreen() {
     <div class="briefing company"><strong>${escapeHtml(resources.company)}</strong><br>${escapeHtml(resources.blurb)}</div>
     <p class="game-note"><b>Illustrative game values:</b> budgets, costs, team sizes and how much each control cuts risk are made up for this game. They are not industry data.</p>`;
   const content = `${resourceBar(used)}${timelineTemplate(used)}
-    <p class="definition rule-line">Program work makes tools work. A card runs at half strength for each prerequisite that isn't in place by its quarter, and only a card at full strength can stop an attack outright. Prerequisites can have their own prerequisites. Attacks land at the end of the year.</p>
+    <p class="definition rule-line">Program work makes tools work. A card runs at half strength for each prerequisite that isn't built in the same quarter or earlier (two missing: ${strengthWord(2)}), and only a card at full strength can stop an attack outright. Prerequisites can have their own prerequisites. Attacks land at the end of the year.</p>
     ${hintTemplate()}
     ${components.map((component) => groupTemplate(component, used)).join("")}
-    <div class="path-actions build-actions"><span class="path-count">${count} ${count === 1 ? "initiative" : "initiatives"} placed</span><button class="button" type="button" data-action="run" data-key="run-bottom"${count ? "" : " disabled"}>Run end-of-year attack simulation</button></div>`;
+    <div class="path-actions build-actions"><span class="path-count${count ? "" : " run-hint"}">${count ? `${count} ${count === 1 ? "initiative" : "initiatives"} placed` : RUN_HINT}</span><button class="button" type="button" data-action="run" data-key="run-bottom"${count ? "" : " disabled"}>Run end-of-year attack simulation</button></div>`;
   return stageShell(header, content);
 }
 
@@ -316,7 +331,7 @@ function whyLine(result) {
   const sorted = [...result.contributions].sort((a, b) => b.cut - a.cut);
   let second = "Nothing you built cut this risk.";
   if (sorted.length === 1) second = `${byId[sorted[0].id].name} alone cut ${percent(result.reduction)}%.`;
-  if (sorted.length > 1) second = `${joinNames(sorted.map((entry) => `${byId[entry.id].name} (${percent(entry.cut)}%)`))} together cut ${percent(result.reduction)}%.`;
+  if (sorted.length > 1) second = `${joinNames(sorted.map((entry) => `${byId[entry.id].name} (${percent(entry.cut)}%)`))} together cut ${percent(result.reduction)}% (each cut applies to the risk the others leave).`;
   return `${first} ${second}`;
 }
 
@@ -357,9 +372,9 @@ function summaryTemplate() {
   const { results, score, won } = state.run;
   return `<div class="run-summary${won ? " won" : " short"}">
     <p class="eyebrow">Program score</p>
-    <div class="program-score"><strong>${percent(score)}%</strong><span class="verdict-tag">${won ? "Phase complete" : `Short of ${winPercent}%`}</span></div>
+    <div class="program-score"><strong>${percent(score)}%</strong><span class="verdict-tag">${won ? "Win" : `Short of ${winPercent}%`}</span></div>
     <div class="meter score-meter${won ? " full" : ""}"><i data-meter="${percent(score)}"></i><b class="goal" data-meter="${winPercent}" aria-hidden="true"></b></div>
-    <p class="score-scale"><span>0%</span><span><b aria-hidden="true">┃</b> Marker: win at ${winPercent}%</span><span>100%</span></p>
+    <p class="score-scale"><span>0%</span><span>100%</span><span class="scale-mark" data-at="${winPercent}"><b aria-hidden="true">┃</b>Marker: win at ${winPercent}%</span></p>
     <p class="exposure">${escapeHtml(biggestExposure(results))}</p>
     <div class="actions completion-actions"><button class="button secondary" type="button" data-action="adjust" data-key="adjust">Adjust roadmap</button><button class="button" type="button" data-action="finish" data-key="finish">Finish →</button></div>
   </div>`;
@@ -375,7 +390,9 @@ function yearScreen() {
     ? summaryTemplate()
     : `<div class="actions run-controls"><button class="button" type="button" data-action="next-attack" data-key="next-attack">Next attack →</button><button class="button secondary" type="button" data-action="show-all" data-key="show-all">Show all</button></div>`;
   const header = `<p class="eyebrow">Phase 4 · The year</p><h1>The year <span>plays out</span></h1><p>The year is over and the attacks arrive, one at a time, starting with the one that counts most toward your score.</p>`;
-  const content = `<div class="incident-progress"><span class="answer-instruction">Attack ${Math.min(state.reveal, total)} of ${total}</span><div class="progress-dots">${dots}</div></div><div class="attack-list" aria-live="polite">${cards}</div>${controls}`;
+  // Once every card is out, "Attack 6 of 6" above the first card reads like a label for it.
+  const progress = done ? `All ${total} attacks` : `Attack ${state.reveal} of ${total}`;
+  const content = `<div class="incident-progress"><span class="answer-instruction">${progress}</span><div class="progress-dots">${dots}</div></div><div class="attack-list" aria-live="polite">${cards}</div>${controls}`;
   return stageShell(header, content);
 }
 
@@ -387,11 +404,57 @@ function qrTile(link) {
   return `<figure class="qr-tile"><span class="qr-frame"><img src="${escapeHtml(link.image)}" alt="QR code: ${escapeHtml(link.label)}" width="160" height="160"></span><figcaption><strong>${escapeHtml(link.label)}</strong><small>${escapeHtml(link.url)}</small></figcaption></figure>`;
 }
 
+// Only the plan's known cards in real quarters, so a stray entry can't throw on the last screen.
+function finishPlan() {
+  return Object.fromEntries(Object.entries(state.plan || {}).filter(([id, quarter]) => byId[id] && resources.quarters[quarter] !== undefined));
+}
+
+// Shorter than the report's outcome line: the takeaway lists all six attacks in a narrow column.
+function resultBadge(result) {
+  if (result.outcome === "prevented") return '<b class="outcome-badge prevented">Prevented</b>';
+  if (result.outcome === "reduced") return `<b class="outcome-badge reduced">Risk cut ${percent(result.reduction)}%</b>`;
+  return '<b class="outcome-badge unprotected">Unprotected</b>';
+}
+
+// Win and loss say different things; the token line on a loss makes clear the token isn't a prize.
+function verdictTemplate(score, won, results) {
+  if (won) return `<p class="eyebrow">Roadmap held · ${score}%</p><h1 id="completion-title">Welcome, <span>Commander.</span></h1><p class="finish-verdict">Your program score was ${score}%, over the ${winPercent}% bar.</p>`;
+  return `<p class="eyebrow">Short of ${winPercent}% · ${score}%</p><h1 id="completion-title">Not this year, <span>Commander.</span></h1><p class="finish-verdict">You finished, so the token is yours. ${escapeHtml(biggestExposure(results))}</p>`;
+}
+
+// One card a player can photograph: score, the plan by quarter, spend, and how each attack went.
+function takeawayTemplate(plan, score, won, results) {
+  const used = spend(plan);
+  const unspent = resources.budgetK - used.budgetK;
+  const columns = resources.quarters.map((name, quarter) => {
+    const chips = initiatives.filter((item) => plan[item.id] === quarter).map((item) => {
+      const missing = missingFoundations(plan, item.id);
+      return `<li class="q-chip accent-${escapeHtml(item.component)}" title="${escapeHtml(item.name)}">${escapeHtml(shortName(item))}${missing.length ? `<em>${strengthWord(missing.length)} strength</em>` : ""}</li>`;
+    }).join("");
+    const full = used.fte[quarter] >= resources.fte[quarter] - 1e-9;
+    return `<div class="q-col"><div class="q-head"><b>${escapeHtml(name)}</b><small${full ? ' class="capped"' : ""}>${fteLabel(used.fte[quarter])}/${fteLabel(resources.fte[quarter])} FTE</small></div><ul class="q-list">${chips || '<li class="q-empty">Nothing built</li>'}</ul></div>`;
+  }).join("");
+  const attacks = [...results].sort((a, b) => byWeight(a.scenario, b.scenario)).map((result) => `<li>${resultBadge(result)}<span>${escapeHtml(result.scenario.title)}<small>${weightLabel(result.scenario.weight)}</small></span></li>`).join("");
+  return `<section class="takeaway ${won ? "won" : "short"}" aria-labelledby="takeaway-title">
+    <header class="takeaway-head"><h2 id="takeaway-title">Your ${escapeHtml(resources.company)} roadmap</h2><p class="takeaway-spend">Spent <b>$${used.budgetK}K</b> of $${resources.budgetK}K${unspent > 0 ? `<span class="unspent">$${unspent}K unspent</span>` : ""}</p></header>
+    <div class="takeaway-score"><div class="program-score"><strong>${score}%</strong><span class="verdict-tag">${won ? "Win" : `Short of ${winPercent}%`}</span></div>
+      <div class="meter score-meter${won ? " full" : ""}"><i data-meter="${score}"></i><b class="goal" data-meter="${winPercent}" aria-hidden="true"></b></div>
+      <p class="goal-scale"><span class="goal-pin" data-at="${winPercent}"><b>Win at ${winPercent}%</b></span></p></div>
+    <div class="takeaway-year">${columns}</div>
+    <ol class="takeaway-attacks">${attacks}</ol>
+    <p class="game-note takeaway-note"><b>Illustrative game values,</b> not industry data · AppSec Academy · SAINTCON 26</p>
+  </section>`;
+}
+
+// The token is given win or lose. Recomputed from the plan rather than state.run, so the
+// screen stands on its own if it is ever reached another way.
 function finishScreen() {
-  return `<section class="completion"><div class="completion-card finish-card" aria-labelledby="completion-title">
-    <img class="completion-logo" src="./assets/space-owasp.png" alt="OWASP space logo">
-    <p class="eyebrow">Qualification confirmed</p>
-    <h1 id="completion-title">Welcome, <span>Commander.</span></h1>
+  const plan = finishPlan();
+  const run = runAll(plan);
+  const score = percent(run.score);
+  return `<section class="completion"><div class="completion-card finish-card with-takeaway${run.won ? "" : " short"}" aria-labelledby="completion-title">
+    ${verdictTemplate(score, run.won, run.results)}
+    ${takeawayTemplate(plan, score, run.won, run.results)}
     <div class="ctf-award"><span>Hackers Challenge CTF token</span><code id="ctf-token">${escapeHtml(CTF_TOKEN)}</code><button class="button" type="button" data-action="copy" data-key="copy">Copy token</button></div>
     <section class="qr-section" aria-labelledby="qr-title"><h2 id="qr-title" class="qr-heading">Keep building your roadmap</h2><div class="qr-row">${RESOURCE_LINKS.map(qrTile).join("")}</div></section>
     <div class="actions completion-actions"><button class="button secondary" type="button" data-action="restart" data-key="restart">Start over</button></div>
@@ -425,7 +488,7 @@ function simTemplate() {
         <div class="sim-health">
           <div class="resource-head"><span>Organization health</span><strong data-sim="health">100%</strong></div>
           <div class="meter score-meter sim-meter"><i data-meter="100"></i><b class="goal" data-meter="${winPercent}" aria-hidden="true"></b></div>
-          <p class="score-scale"><span>0%</span><span><b aria-hidden="true">┃</b> Hold ${winPercent}%</span><span>100%</span></p>
+          <p class="score-scale"><span>0%</span><span>100%</span><span class="scale-mark" data-at="${winPercent}"><b aria-hidden="true">┃</b>Hold ${winPercent}%</span></p>
         </div>
         <p class="sim-status" id="sim-status" aria-live="polite">Loading the simulation…</p>
         <div class="sim-actions" data-sim="actions">${simButtons(false)}</div>
@@ -469,7 +532,7 @@ function simDone(token) {
   const { score, won } = runAll(state.plan);
   if (sim.data && Math.abs(sim.data.finalHealth - score) > 1e-6) console.warn(`Attack simulation: engine finalHealth ${sim.data.finalHealth} differs from runAll score ${score}.`);
   setSimHealth(score);
-  setSimStatus(won ? `Roadmap held: ${percent(score)}%` : `Below ${winPercent}%: ${percent(score)}%`, won ? "held" : "below");
+  setSimStatus(won ? `Program score ${percent(score)}%: win` : `Program score ${percent(score)}%: short of ${winPercent}%`, won ? "held" : "below");
   const actionsBox = simRoot.querySelector('[data-sim="actions"]');
   const hadFocus = actionsBox.contains(document.activeElement) || !simRoot.contains(document.activeElement);
   actionsBox.innerHTML = simButtons(true);

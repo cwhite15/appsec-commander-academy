@@ -1,11 +1,14 @@
 /* Mission Commander components, on top of the shared academy theme in assets/styles.css.
    Same tokens, type and scanline feel; only the Commander path's components live here. */
 
-/* Each component carries its own accent. --accent-ink is a lighter tint for small text on teal. */
+/* Each component carries its own accent. --accent-ink is a lighter tint for small text on teal.
+   Measure's accent is a lighter teal than --teal so dark text on it (the selected quarter, the
+   Built badge and the Prevented badge) clears 4.5:1; --teal itself only reaches about 4.2:1. */
+:root { --teal-text-bg: #62898c; }
 .accent-define { --accent: var(--cyan); --accent-ink: var(--cyan); }
 .accent-evaluate { --accent: var(--amber); --accent-ink: var(--amber); }
 .accent-integrate { --accent: var(--coral); --accent-ink: var(--coral); }
-.accent-measure { --accent: var(--teal); --accent-ink: #9bc2c4; }
+.accent-measure { --accent: var(--teal-text-bg); --accent-ink: #9bc2c4; }
 
 main:focus { outline: none; }
 .path-nav-wrap { max-width: 1240px; margin: auto; padding: 1.25rem clamp(1rem, 4vw, 3rem) 0; }
@@ -49,7 +52,7 @@ main:focus { outline: none; }
 .stat-copy h2 { margin: 0 0 .8rem; font-size: clamp(1.3rem, 2.4vw, 1.75rem); line-height: 1.15; }
 .stat-body { margin: 0 0 .6rem; color: var(--paper); font-size: 1.02rem; }
 .stat-secondary { margin: 0 0 1rem; color: #c7d2d0; font-size: .84rem; }
-.stat-source { margin: auto 0 0; padding-top: .7rem; border-top: 1px solid var(--line); color: var(--muted); font: .64rem/1.5 var(--font-mono); letter-spacing: .03em; }
+.stat-source { margin: auto 0 0; padding-top: .7rem; border-top: 1px solid var(--line); color: var(--muted); font: .75rem/1.5 var(--font-mono); letter-spacing: .03em; }
 .path-header { max-width: 1240px; margin: auto; padding: 1.5rem clamp(1rem, 4vw, 3rem) 0; }
 .path-header + .path-section { padding-top: 2rem; }
 .path-header h1 { font-size: clamp(2.5rem, 6vw, 4.6rem); }
@@ -65,6 +68,8 @@ main:focus { outline: none; }
 .res-label { display: block; margin-bottom: .2rem; color: var(--muted); font: .56rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
 .res-fte { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; }
 .res-bar .button { min-height: 42px; }
+.res-run { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .4rem .8rem; }
+.run-hint { color: var(--amber); font: .75rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
 .meter.capped > i { background: var(--amber); }
 
 .year-console { margin-bottom: 1.2rem; }
@@ -84,9 +89,9 @@ main:focus { outline: none; }
 .incoming { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .45rem; padding: .4rem .5rem; border: 1px solid rgba(248,120,30,.45); background: rgba(248,120,30,.07); font-size: .76rem; line-height: 1.3; overflow-wrap: anywhere; }
 .incoming-title { display: block; }
 .incoming-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .5rem; margin-top: .25rem; }
-.incoming-meta small { color: var(--muted); font: .56rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.incoming-meta small { color: var(--muted); font: .75rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
 /* Likelihood: Likely coral, Possible amber, Less likely teal */
-.lk-badge { padding: .05rem .35rem; font: 700 .54rem/1.5 var(--font-mono); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.lk-badge { padding: .05rem .35rem; font: 700 .75rem/1.5 var(--font-mono); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
 .lk-likely { background: var(--coral); color: var(--ink); }
 .lk-possible { background: var(--amber); color: var(--ink); }
 .lk-less-likely { border: 1px solid var(--teal); color: #9bc2c4; }
@@ -122,7 +127,7 @@ main:focus { outline: none; }
 .badge.placed-badge { background: var(--accent); color: var(--ink); }
 .init-card h3 { margin: 0; font-size: 1.05rem; line-height: 1.25; }
 .init-does { margin: 0; color: var(--muted); font-size: .84rem; line-height: 1.45; }
-.init-cost { margin: 0; color: var(--cyan); font: .66rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.init-cost { margin: 0; color: var(--cyan); font: .75rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
 .init-needs { margin: 0; color: var(--paper); font-size: .76rem; }
 .init-needs b { color: var(--amber); font: .6rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
 .init-unlocks b { color: var(--cyan); }
@@ -137,7 +142,7 @@ main:focus { outline: none; }
 .q-btn.active { background: var(--accent); color: var(--ink); font-weight: 700; }
 .q-btn:disabled { opacity: .3; cursor: not-allowed; }
 .q-reason { margin: 0; color: var(--muted); font-size: .7rem; }
-.init-ref { margin: 0; color: #708993; font: .58rem var(--font-mono); letter-spacing: .03em; }
+.init-ref { margin: 0; color: #708993; font: .75rem var(--font-mono); letter-spacing: .03em; }
 .build-actions { margin-top: 2rem; }
 
 /* Phase 3: end-of-year attack simulation, a modal console above the dimmed roadmap */
@@ -158,13 +163,16 @@ body.sim-open { overflow: hidden; }
 .sim-health .sim-meter { margin-top: .45rem; }
 .sim-health .score-scale { max-width: none; margin-top: .3rem; }
 .sim-status { min-width: 0; margin: 0; color: var(--paper); font: .74rem/1.4 var(--font-mono); }
-.sim-status.held, .sim-status.below { font: 700 1rem/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
+/* Balanced, so a final line that wraps beside the buttons doesn't leave "80%" alone on line two. */
+.sim-status.held, .sim-status.below { font: 700 1rem/1.3 var(--font-mono); text-transform: uppercase; letter-spacing: .08em; text-wrap: balance; }
 .sim-status.held { color: var(--cyan); }
 .sim-status.below { color: var(--coral); }
 .sim-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .6rem; }
 .sim-actions .button { min-height: 42px; }
 
 /* Phase 4: the year */
+/* No clearance stamp, so the shared two-column header drops its empty column and gap. */
+.mission-stage-simulator .mission-header { grid-template-columns: minmax(0, 1fr); }
 .mission-header > div > p:not(.eyebrow) { margin: 1rem 0 0; }
 .attack-list { display: grid; gap: .9rem; }
 .attack-card { padding: 1.2rem 1.3rem; border: 1px solid var(--line); border-left: 4px solid var(--muted); background: var(--panel); }
@@ -173,13 +181,13 @@ body.sim-open { overflow: hidden; }
 .attack-card.unprotected { border-left-color: var(--coral); }
 .attack-card.fresh { animation: attack-in .45s ease-out; }
 @keyframes attack-in { from { opacity: 0; transform: translateY(12px); } }
-.attack-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .7rem; color: var(--cyan); font: .62rem var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
+.attack-meta { display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .7rem; color: var(--cyan); font: .75rem var(--font-mono); text-transform: uppercase; letter-spacing: .1em; }
 .attack-meta > span:last-child { color: var(--muted); }
 .attack-card h3 { margin: .35rem 0 .4rem; font-size: 1.35rem; line-height: 1.15; }
 .attack-card > p { margin: 0; color: #c7d2d0; }
 .outcome { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .8rem; margin: .9rem 0 .6rem; }
 .outcome-badge { padding: .3rem .6rem; font: 700 .72rem var(--font-mono); text-transform: uppercase; letter-spacing: .12em; }
-.outcome-badge.prevented { background: var(--teal); color: var(--ink); }
+.outcome-badge.prevented { background: var(--teal-text-bg); color: var(--ink); }
 .outcome-badge.reduced { background: var(--amber); color: var(--ink); }
 .outcome-badge.unprotected { background: var(--coral); color: var(--ink); }
 .cut-meter { display: block; width: min(180px, 40vw); margin: 0; }
@@ -202,6 +210,12 @@ body.sim-open { overflow: hidden; }
 .short .score-meter > i { background: var(--coral); }
 .score-scale { display: flex; justify-content: space-between; max-width: 560px; margin: .35rem auto 0; color: var(--muted); font: .58rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
 .score-scale b { color: var(--paper); font-weight: 400; }
+/* The win label hangs under the 80% tick: its left comes from data-at (paintMeters), the glyph
+   sits on the 0%/100% line and the words on a second line. The 40% cap keeps a label centred
+   anywhere from 20% to 80% inside the bar; longer text wraps instead of overflowing. */
+.score-scale { position: relative; padding-bottom: 1.6em; line-height: 1.6; }
+.scale-mark { position: absolute; top: 0; width: max-content; max-width: 40%; transform: translateX(-50%); text-align: center; line-height: 1.6; }
+.scale-mark b { display: block; line-height: inherit; }
 .exposure { max-width: 560px; margin: 1rem auto 1.2rem; color: var(--paper); }
 
 /* Finish: three resource QR tiles under the CTF token */
@@ -215,6 +229,44 @@ body.sim-open { overflow: hidden; }
 .qr-tile figcaption { min-width: 0; max-width: 100%; }
 .qr-tile strong { display: block; font: .9rem/1.25 var(--font-heading); text-transform: uppercase; letter-spacing: .03em; }
 .qr-tile small { display: block; margin-top: .3rem; color: var(--muted); font: .58rem/1.4 var(--font-mono); overflow-wrap: anywhere; }
+
+/* Finish: the verdict follows the result. A loss turns the card and eyebrow coral. */
+.finish-card.short { border-color: var(--coral); }
+.finish-card.short > .eyebrow { color: var(--coral); }
+.finish-verdict { max-width: 560px; margin: 1.1rem auto 0; color: var(--paper); font-size: 1.05rem; line-height: 1.5; }
+
+/* Finish: the takeaway card, built to be photographed. The logo is dropped and the h1
+   shrunk so the score and the plan sit near the top on a booth laptop. */
+.finish-card.with-takeaway { max-width: 900px; padding: clamp(1.25rem, 4vw, 2.5rem); }
+.finish-card.with-takeaway h1 { font-size: clamp(2.2rem, 5vw, 3.4rem); }
+.with-takeaway .ctf-award { margin-top: 0; }
+.takeaway { margin: 1.4rem 0; padding: 1rem 1.1rem 1.1rem; border: 1px solid var(--cyan); border-top-width: 3px; background: rgba(7,19,31,.92); text-align: left; }
+.takeaway.short { border-color: var(--coral); }
+.takeaway-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .3rem 1rem; }
+.takeaway-head h2 { margin: 0; color: var(--cyan); font: .74rem var(--font-mono); text-transform: uppercase; letter-spacing: .12em; }
+.takeaway.short .takeaway-head h2 { color: var(--coral); }
+.takeaway-spend { margin: 0; color: var(--muted); font: .68rem var(--font-mono); text-transform: uppercase; letter-spacing: .08em; }
+.takeaway-spend b { color: var(--paper); font-weight: 400; }
+.takeaway-spend .unspent { margin-left: .6rem; padding: .05rem .35rem; border: 1px solid var(--amber); color: var(--amber); }
+.takeaway-score { margin: .5rem 0 .9rem; }
+.takeaway .program-score { justify-content: flex-start; gap: .4rem 1rem; }
+.takeaway .program-score strong { font-size: clamp(2.8rem, 6vw, 3.6rem); }
+.takeaway .score-meter { margin-top: .7rem; }
+/* The pin's left edge sits on the goal tick (set from data-at), and the label centres on it. */
+.goal-scale { position: relative; height: 1.6rem; margin: .3rem 0 0; }
+.goal-pin { position: absolute; top: 0; width: 0; }
+.goal-pin b { display: inline-block; transform: translateX(-50%); color: var(--paper); font: 400 .58rem/1.2 var(--font-mono); text-align: center; text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.goal-pin b::before { content: "▲"; display: block; font-size: .5rem; }
+.takeaway-year { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.takeaway-year .q-col { padding: .6rem; gap: .45rem; }
+.takeaway-year .q-head b { font-size: 1.1rem; }
+.takeaway-year .q-head small.capped { color: var(--amber); }
+.takeaway-year .q-chip { font-size: .72rem; }
+.takeaway-attacks { columns: 2; column-gap: 1.2rem; margin: .9rem 0 0; padding: 0; list-style: none; }
+.takeaway-attacks li { display: grid; grid-template-columns: 6.8rem minmax(0, 1fr); gap: .6rem; align-items: center; padding: .3rem 0; border-bottom: 1px solid rgba(115,229,241,.1); break-inside: avoid; font-size: .8rem; line-height: 1.25; }
+.takeaway-attacks .outcome-badge { padding: .2rem .4rem; font-size: .58rem; letter-spacing: .08em; text-align: center; }
+.takeaway-attacks small { display: block; color: var(--muted); font: .56rem var(--font-mono); text-transform: uppercase; letter-spacing: .06em; }
+.takeaway-note { max-width: none; margin: .8rem 0 0; }
 
 /* The long run button squeezes the team meters, so give them their own row below wide desktop. */
 @media (max-width: 1180px) {
@@ -240,7 +292,7 @@ body.sim-open { overflow: hidden; }
   .component-card { min-height: 0; }
   .stat-figure { font-size: 5.5rem; }
   .res-bar { grid-template-columns: 1fr; gap: .45rem; padding: .55rem .7rem; }
-  .res-bar .button { display: none; }
+  .res-run { display: none; }
   .res-fte { gap: .5rem; }
   .res-bar .resource-head { gap: .3rem; }
   .res-bar .meter { height: 4px; margin-top: .25rem; }
@@ -254,4 +306,7 @@ body.sim-open { overflow: hidden; }
   .qr-row { grid-template-columns: 1fr; gap: .7rem; }
   .qr-tile { flex-direction: row; align-items: center; text-align: left; padding: .7rem; }
   .qr-frame { flex: 0 0 112px; width: 112px; padding: 8px; }
+  .takeaway { padding: .8rem; }
+  .takeaway-year { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .takeaway-attacks { columns: 1; }
 }

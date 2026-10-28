@@ -8,7 +8,7 @@ This is the Commander track of the SAINTCON AppSec Academy, alongside the [Cadet
 
 1. **Why it matters.** Two sourced numbers from the Verizon Data Breach Investigations Reports for 2025 and 2026.
 2. **Four parts of a program.** Define, Evaluate, Integrate, Measure. Open all four to continue.
-3. **Build your roadmap.** Run the security program at OrbitPay, a fictional fintech, for one year. Place 18 initiative cards into four quarters, within one budget and a team cap per quarter. Program work makes tools work: a card runs at half strength for each prerequisite that isn't in place by its quarter, and only a card at full strength can stop an attack outright.
+3. **Build your roadmap.** Run the security program at OrbitPay, a fictional fintech, for one year. Place 18 initiative cards into four quarters, within one budget and a team cap per quarter. Program work makes tools work: a card runs at half strength for each prerequisite that isn't built in the same quarter or earlier, and only a card at full strength can stop an attack outright.
 4. **The end-of-year attack simulation.** An animated console drops your cards in as a shield, then six attacks test it. The program score is the risk you cut, weighted by how likely each attack is.
 5. **After-action report.** What each attack did, and why: prevented, risk cut, or unprotected, naming any missing prerequisite. Adjust the roadmap and run it again, or finish.
 6. **Finish.** The Hackers Challenge token, and QR codes for BSIMM, OWASP SAMM and a roadmap worksheet to keep building.

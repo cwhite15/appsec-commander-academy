@@ -19,11 +19,11 @@ Players run the security program at OrbitPay, a 120-person fintech, for one year
 The progress dots at the top show five steps: Why it matters, Four parts, Roadmap, The year, Finish. **Back** works on the middle steps.
 
 1. **Phase 1, Intel: why AppSec matters.** Two numbers from the Verizon breach reports, with their sources on screen. See [The two stats](#the-two-stats).
-2. **Phase 2, Briefing: four parts of a program.** Define, Evaluate, Integrate, Measure. The player opens all four cards before **Continue** unlocks.
-3. **Phase 3, Roadmap: build the plan.** The player places cards into quarters Q1 to Q4. The resource bar shows the budget left and the team used in each quarter. A timeline shows what is built in each quarter, and an **End of year** column lists the six incoming attacks, heaviest first. **Get a hint** shows three tips.
-4. **The end-of-year attack simulation.** **Run end-of-year attack simulation** opens an animated console. The player's cards drop in as a shield around the company, then each attack fires at it. An **Organization health** meter falls as attacks get through, with a marker at 80%. **Skip to results** (or Esc) jumps to the end. When it ends, the player picks **Back to roadmap** or **See after-action report**.
-5. **Phase 4, The year: the after-action report.** One card per attack, heaviest first. Each says Prevented, "Risk cut by N%", or Unprotected, and says why in one line, naming any prerequisite that was missing. The PHP2Shell card adds a "Real world" note. The summary shows the program score, the 80% marker, and the player's biggest exposure. The player can **Adjust roadmap** and try again, or **Finish**.
-6. **Finish.** "Welcome, Commander." The Hackers Challenge CTF token with a **Copy token** button, three QR codes under "Keep building your roadmap", and **Start over**.
+2. **Phase 2, Briefing: four parts of a program.** Define, Evaluate, Integrate, Measure. The player opens all four cards before **Continue** unlocks; until then the count reads "Open all four to continue".
+3. **Phase 3, Roadmap: build the plan.** The player places cards into quarters Q1 to Q4. The resource bar shows the budget left and the team used in each quarter. A timeline shows what is built in each quarter, and an **End of year** column lists the six incoming attacks, heaviest first. **Get a hint** shows three tips. The run buttons stay disabled, with "Place a card to run" beside them, until at least one card is placed.
+4. **The end-of-year attack simulation.** **Run end-of-year attack simulation** opens an animated console. The player's cards drop in as a shield around the company, then each attack fires at it. An **Organization health** meter falls as attacks get through, with a "Hold 80%" marker. **Skip to results** (or Esc) jumps to the end. It ends on "Program score N%: win" or "Program score N%: short of 80%". Then the player picks **Back to roadmap** or **See after-action report**.
+5. **Phase 4, The year: the after-action report.** One card per attack, heaviest first. Each says Prevented, "Risk cut by N%", or Unprotected, and says why in one line, naming any prerequisite that was missing. The PHP2Shell card adds a "Real world" note. The summary shows the program score tagged "Win" or "Short of 80%", the 80% marker, and the player's biggest exposure. The player can **Adjust roadmap** and try again, or **Finish**.
+6. **Finish.** The heading follows the result. A win says "Welcome, Commander." with the program score over the 80% bar. A loss says "Not this year, Commander." in coral, tells the player the token is still theirs, and names their biggest exposure. Below it, a takeaway card the player can photograph: "Your OrbitPay roadmap" with the score and the 80% marker, the cards built in each quarter (flagging any below full strength), the team used against each quarter's cap, the budget spent and any left unspent, and the six attacks heaviest first, each marked Prevented, "Risk cut N%" or Unprotected. Then the Hackers Challenge CTF token with a **Copy token** button, three QR codes under "Keep building your roadmap", and **Start over**.
 
 **The CTF token is given whether or not the player wins.** **Finish** is on the report after every run, and the finish screen shows the token either way. Winning is the teaching goal, not the gate.
 
@@ -61,11 +61,11 @@ All 18 cards, in model order. Every number is copied from `js/model.js` and is a
 |---|---|---|---|---|---|---|---|---|---|---|
 | `why` | Define your why | Define | Program work, foundation | 0 | 0.5 | - | - | - | SM1.1 | Strategy & Metrics |
 | `threat_assessment` | Conduct a high-level threat assessment | Define | Program work, foundation | 0 | 0.5 | - | - | - | AM1.3 | Threat Assessment |
-| `inventory` | Build your application inventory | Define | Program work, foundation | 0 | 1 | - | PHP2Shell | PHP2Shell 90% | AA1.4 | Threat Assessment |
+| `inventory` | Build your application inventory | Define | Program work, foundation | 0 | 1 | - | PHP2Shell | PHP2Shell 90% | CMVM2.3 | Threat Assessment |
 | `partners` | Meet with key partners | Define | Program work, foundation | 0 | 0.5 | - | - | - | SM2.7 | Strategy & Metrics |
 | `operating_model` | Define your operating model | Evaluate | Program work, foundation | 0 | 0.5 | - | - | - | SM1.4 | Strategy & Metrics |
 | `champions` | Design a security champions program | Evaluate | Program work, foundation | 5 | 1 | `partners` | - | SQL injection 20%, Refund logic abuse 20% | SM2.3 | Education & Guidance |
-| `training` | Secure coding training | Evaluate | Tool | 20 | 0.5 | - | - | SQL injection 40%, Cloud key leak 30%, Refund logic abuse 20% | T2.9 | Education & Guidance |
+| `training` | Secure coding training | Evaluate | Tool | 20 | 0.5 | - | - | SQL injection 40%, Cloud key leak 30%, Refund logic abuse 20% | T1.7 | Education & Guidance |
 | `pipeline` | Map your code delivery pipeline | Integrate | Program work, foundation | 0 | 0.5 | - | - | - | SM3.4 | Secure Build |
 | `fix_slas` | Define your remediation process & SLAs | Integrate | Program work, foundation | 0 | 1 | `operating_model` | - | Log4j-style CVE 30%, PHP2Shell 50% | CMVM1.3 | Defect Management |
 | `threat_model` | Shift left with threat modeling | Integrate | Program work | 5 | 0.5 | `champions`, `threat_assessment` | Refund logic abuse | SQL injection 20%, Refund logic abuse 70% | AA1.2 | Threat Assessment |
@@ -193,7 +193,7 @@ Result: Log4j-style CVE 75%, PHP2Shell prevented, credential stuffing prevented,
 | Q3 | Build your application inventory; MFA & login hardening; Secrets vault & push protection |
 | Q4 | Define your operating model; Define your remediation process & SLAs; Pen test & bug bounty |
 
-Result: Log4j-style CVE 55%, PHP2Shell prevented, credential stuffing prevented, SQL injection 75%, cloud key leak prevented, refund logic abuse 80%.
+Result: Log4j-style CVE 55%, PHP2Shell prevented, credential stuffing prevented, SQL injection 74%, cloud key leak prevented, refund logic abuse 79%.
 
 **Log4j-style + PHP2Shell + credential stuffing: 87.1%.** Spend $70K. FTE per quarter 3/3/0.5/2.
 
@@ -218,7 +218,7 @@ Result: Log4j-style CVE prevented, PHP2Shell prevented, credential stuffing prev
 | Buy SCA and MFA in Q1 and SAST in Q2, no program work | 16.0% |
 | The same tools first, with the foundations added in Q3 and Q4 | 45.2% |
 
-The best tools-first plan, 78.0%, spends $65K: MFA, training and secrets in Q1; partners, operating model, champions and remediation in Q2; why, threat assessment, KPIs, metrics review and threat modeling in Q3; inventory in Q4. MFA and secrets run at half strength because the inventory comes last. Result: Log4j-style CVE 55%, PHP2Shell prevented, credential stuffing 65%, SQL injection 76%, cloud key leak 77%, refund logic abuse prevented.
+The best tools-first plan, 78.0%, spends $65K: MFA, training and secrets in Q1; partners, operating model, champions and remediation in Q2; why, threat assessment, KPIs, metrics review and threat modeling in Q3; inventory in Q4. MFA and secrets run at half strength because the inventory comes last. Result: Log4j-style CVE 55%, PHP2Shell prevented, credential stuffing 64%, SQL injection 75%, cloud key leak 76%, refund logic abuse prevented.
 
 ### Cards in winning plans
 
